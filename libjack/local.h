@@ -14,6 +14,7 @@ struct _jack_client {
     int             graph_next_fd;
     int             request_fd;
     int             upstream_is_jackd;
+    int	            process_pipe[2];
 
     /* these two are copied from the engine when the 
      * client is created.
@@ -40,9 +41,11 @@ struct _jack_client {
     /* specific ressources for server/client real-time thread communication */
     mach_port_t clienttask, bp, serverport, replyport;
     trivial_message  message;
-    pthread_t process_thread;
     char rt_thread_ok : 1;
 #endif
+    pthread_t process_thread;
+    pthread_mutex_t process_mutex;
+    pthread_cond_t  process_wakeup;
 
     /* callbacks 
      */

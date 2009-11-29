@@ -69,8 +69,10 @@ static int
 jack_client_close_aux (jack_client_t *client);
 
 #define EVENT_POLL_INDEX 0
-#define WAIT_POLL_INDEX 1
+#define PROCESS_PIPE_INDEX 1
+#define WAIT_POLL_INDEX 2
 #define event_fd pollfd[EVENT_POLL_INDEX].fd
+#define process_pipe_fd pollfd[PROCESS_PIPE_INDEX].fd
 #define graph_wait_fd pollfd[WAIT_POLL_INDEX].fd
 
 typedef struct {
@@ -336,7 +338,7 @@ jack_client_alloc ()
 	if ((client = (jack_client_t *) malloc (sizeof (jack_client_t))) == NULL) {
 		return NULL;
 	}
-	if ((client->pollfd = (struct pollfd *) malloc (sizeof (struct pollfd) * 2)) == NULL) {
+	if ((client->pollfd = (struct pollfd *) malloc (sizeof (struct pollfd) * 3)) == NULL) {
 		free (client);
 		return NULL;
 	}
@@ -357,6 +359,7 @@ jack_client_alloc ()
 	client->on_info_shutdown = NULL;
 	client->n_port_types = 0;
 	client->port_segment = NULL;
+
 
 #ifdef USE_DYNSIMD
 	init_cpu();
@@ -519,10 +522,15 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 	DEBUG ("graph reorder\n");
 
 	if (client->graph_wait_fd >= 0) {
+		char c=0;
 		DEBUG ("closing graph_wait_fd==%d", client->graph_wait_fd);
 		close (client->graph_wait_fd);
 		client->graph_wait_fd = -1;
+
+		write (client->process_pipe[1], &c, 1 );  
 	} 
+
+	pthread_mutex_lock( &client->process_mutex );
 
 	if (client->graph_next_fd >= 0) {
 		DEBUG ("closing graph_next_fd==%d", client->graph_next_fd);
@@ -561,6 +569,9 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 	if (client->control->graph_order_cbset) {
 		client->graph_order (client->graph_order_arg);
 	}
+
+	pthread_cond_signal( &client->process_wakeup );
+	pthread_mutex_unlock( &client->process_mutex );
 
 	return 0;
 }
@@ -1034,9 +1045,21 @@ jack_client_open_aux (const char *client_name,
 	client->pollfd[EVENT_POLL_INDEX].events =
 		POLLIN|POLLERR|POLLHUP|POLLNVAL;
 #ifndef JACK_USE_MACH_THREADS
+	client->pollfd[PROCESS_PIPE_INDEX].events =
+		POLLIN|POLLERR|POLLHUP|POLLNVAL;
 	client->pollfd[WAIT_POLL_INDEX].events =
 		POLLIN|POLLERR|POLLHUP|POLLNVAL;
 #endif
+
+	pthread_mutex_init( &client->process_mutex, NULL );
+	pthread_cond_init( &client->process_wakeup, NULL );
+
+	if (pipe( client->process_pipe )) {
+		jack_error ("Unable to create process pipe");
+		*status |= (JackFailure);
+		goto fail;
+	}
+	client->process_pipe_fd = client->process_pipe[0];
 
 	/* Don't access shared memory until server connected. */
 	if (jack_initialize_shm (va.server_name)) {
@@ -1284,11 +1307,7 @@ jack_start_freewheel (jack_client_t* client)
 	jack_client_control_t *control = client->control;
 
 	if (client->engine->real_time) {
-#if JACK_USE_MACH_THREADS 
 		jack_drop_real_time_scheduling (client->process_thread);
-#else
-		jack_drop_real_time_scheduling (client->thread);
-#endif
 	}
 
 	if (control->freewheel_cb_cbset) {
@@ -1302,13 +1321,8 @@ jack_stop_freewheel (jack_client_t* client)
 	jack_client_control_t *control = client->control;
 
 	if (client->engine->real_time) {
-#if JACK_USE_MACH_THREADS 
 		jack_acquire_real_time_scheduling (client->process_thread,
 				client->engine->client_priority);
-#else
-		jack_acquire_real_time_scheduling (client->thread, 
-				client->engine->client_priority);
-#endif
 	}
 
 	if (control->freewheel_cb_cbset) {
@@ -1466,6 +1480,136 @@ jack_client_process_events (jack_client_t* client)
 }
 
 static int
+jack_client_event_loop( jack_client_t* client )
+{
+	jack_client_control_t *control = client->control;
+
+	DEBUG ("client polling on event fd" );
+	
+	while (1) {
+		if (poll ( &(client->pollfd[EVENT_POLL_INDEX]), 1, 1000) < 0) {
+			if (errno == EINTR) {
+				continue;
+			}
+			jack_error ("poll failed in client (%s)",
+				    strerror (errno));
+			return -1;
+		}
+
+		pthread_testcancel();
+
+		
+		if (jack_client_process_events (client)) {
+			DEBUG ("event processing failed\n");
+			return 0;
+		}
+	}
+
+	if (control->dead || client->pollfd[EVENT_POLL_INDEX].revents & ~POLLIN) {
+		DEBUG ("client appears dead or event pollfd has error status\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
+jack_client_graph_wait( jack_client_t* client )
+{
+	jack_client_control_t *control = client->control;
+
+	DEBUG ("client polling on graph_wait_fd" );
+	
+	while (1) {
+		if (client->graph_wait_fd >= 0 ) { 
+			if (poll (& client->pollfd[PROCESS_PIPE_INDEX], 2, 1000) < 0) {
+				if (errno == EINTR) {
+					continue;
+				}
+				jack_error ("poll failed in client (%s)",
+						strerror (errno));
+				return -1;
+			}
+			if (client->pollfd[PROCESS_PIPE_INDEX].revents & POLLIN) {
+				char c;
+				read( client->process_pipe_fd, &c, 1 );
+			}
+		}
+
+		pthread_testcancel();
+
+		
+		/* get an accurate timestamp on waking from poll for a
+		 * process() cycle. 
+		 */
+		
+		if (client->graph_wait_fd >= 0
+		    && client->pollfd[WAIT_POLL_INDEX].revents & POLLIN) {
+			control->awake_at = jack_get_microseconds();
+		}
+		
+		DEBUG ("pfd[WAIT].revents = 0x%x",
+		       client->pollfd[WAIT_POLL_INDEX].revents);
+		
+		if (client->graph_wait_fd >= 0 &&
+		    (client->pollfd[WAIT_POLL_INDEX].revents & ~POLLIN)) {
+			
+			/* our upstream "wait" connection
+			   closed, which either means that
+			   an intermediate client exited, or
+			   jackd exited, or jackd zombified
+			   us.
+			   
+			   we can discover the zombification
+			   via client->control->dead, but
+			   the other two possibilities are
+			   impossible to identify just from
+			   this situation. so we have to
+			   check what we are connected to,
+			   and act accordingly.
+			*/
+			
+			if (client->upstream_is_jackd) {
+				DEBUG ("WE DIE... just kidding\n");
+				// no we dont die.
+				// this might be rechaining in progress,
+				// we will only terminate when the event_thread
+				// tells us so.
+				client->graph_wait_fd = -1;
+				client->pollmax = 1;
+			} else {
+				DEBUG ("WE PUNT\n");
+				/* don't poll on the wait fd
+				 * again until we get a
+				 * GraphReordered event.
+				 */
+				
+				client->graph_wait_fd = -1;
+				client->pollmax = 1;
+			}
+		}
+		
+		if (client->graph_wait_fd >= 0 &&
+		    (client->pollfd[WAIT_POLL_INDEX].revents & POLLIN)) {
+			DEBUG ("time to run process()\n");
+			break;
+		} else {
+			DEBUG ("poll failed, maybe we are being rechained");
+			// now we basically need to wait, until
+			pthread_cond_wait( &client->process_wakeup, &client->process_mutex );
+		}
+	}
+
+	// XXX: maybe this is contraproductive.
+	if (control->dead || client->pollfd[EVENT_POLL_INDEX].revents & ~POLLIN) {
+		DEBUG ("client appears dead or event pollfd has error status\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
 jack_client_core_wait (jack_client_t* client)
 {
 	jack_client_control_t *control = client->control;
@@ -1577,7 +1721,7 @@ jack_wake_next_client (jack_client_t* client)
 	DEBUG("reading cleanup byte from pipe %d\n", client->graph_wait_fd);
 
 	/* "upstream client went away?  readability is checked in
-	 * jack_client_core_wait(), but that's almost a whole cycle
+	 * jack_client_graph_wait(), but that's almost a whole cycle
 	 * before we get here.
 	 */
 
@@ -1607,7 +1751,7 @@ jack_wake_next_client (jack_client_t* client)
 static jack_nframes_t 
 jack_thread_first_wait (jack_client_t* client)
 {
-	if (jack_client_core_wait (client)) {
+	if (jack_client_graph_wait (client)) {
 		return 0;
 	}
 	return client->control->nframes;
@@ -1647,7 +1791,7 @@ jack_thread_wait (jack_client_t* client, int status)
 	
    /* SECTION TWO: WAIT FOR NEXT DATA PROCESSING TIME */
 
-	if (jack_client_core_wait (client)) {
+	if (jack_client_graph_wait (client)) {
 		return 0;
 	}
 
@@ -1670,7 +1814,7 @@ jack_nframes_t jack_cycle_wait (jack_client_t* client)
 {
 	/* SECTION TWO: WAIT FOR NEXT DATA PROCESSING TIME */
 
-	if (jack_client_core_wait (client)) {
+	if (jack_client_graph_wait (client)) {
 		return 0;
 	}
 
@@ -1724,7 +1868,7 @@ void jack_cycle_signal(jack_client_t* client, int status)
 }
 
 static void
-jack_client_thread_aux (void *arg)
+jack_process_thread_aux (void *arg)
 {
 	jack_client_t *client = (jack_client_t *) arg;
 	jack_client_control_t *control = client->control;
@@ -1745,13 +1889,17 @@ jack_client_thread_aux (void *arg)
 		client->thread_init (client->thread_init_arg);
 	}
 
+	// lock the process mutex, it gets unlocked when
+	// we are waiting for the wakeup condition.
+	// the client thread triggers a release by closing the graphfd
+	// which will make the process thread wait on being woken up
+	// again.
+
+	//pthread_mutex_lock( &client->process_mutex );
 	/* wait for first wakeup from server */
 
 	if (jack_thread_first_wait (client) == control->nframes) {
 
-		/* now run till we're done */
-
-		if (control->process_cbset) {
 
 			/* run process callback, then wait... ad-infinitum */
 
@@ -1768,18 +1916,26 @@ jack_client_thread_aux (void *arg)
 				DEBUG("client done with wait");
 			}
 
-		} else {
-			/* no process handling but still need to process events */
-			while (jack_thread_wait (client, 0) == control->nframes)
-				;
-		}
 	}
 
+	jack_error( "process thread exiting now... " );
+	pthread_mutex_unlock( &client->process_mutex );
 	jack_client_thread_suicide (client);
 }
 
 static void *
 jack_client_thread (void *arg)
+{
+	jack_client_t *client = (jack_client_t *) arg;
+	//jack_client_control_t *control = client->control;
+
+	jack_client_event_loop( client );
+	jack_client_thread_suicide (client);
+
+	return (void *) 0;
+}
+static void *
+jack_client_process_thread (void *arg)
 {
 	jack_client_t *client = (jack_client_t *) arg;
 	jack_client_control_t *control = client->control;
@@ -1798,7 +1954,7 @@ jack_client_thread (void *arg)
 		client->thread_cb(client->thread_cb_arg);
 		jack_client_thread_suicide(client);
 	} else {
-		jack_client_thread_aux(arg);
+		jack_process_thread_aux(arg);
 	}
 	
 	/*NOTREACHED*/
@@ -1923,10 +2079,8 @@ jack_start_thread (jack_client_t *client)
 #endif /* USE_MLOCK */
 	}
 
-#ifdef JACK_USE_MACH_THREADS
-/* Stephane Letz : letz@grame.fr
-   On MacOSX, the normal thread does not need to be real-time.
-*/
+	// lock the process_mutex...
+	pthread_mutex_lock( &client->process_mutex );
 	if (jack_client_create_thread (client, 
 				       &client->thread,
 				       client->engine->client_priority,
@@ -1934,18 +2088,9 @@ jack_start_thread (jack_client_t *client)
 				       jack_client_thread, client)) {
 		return -1;
 	}
-#else
-	if (jack_client_create_thread (client,
-				&client->thread,
-				client->engine->client_priority,
-				client->engine->real_time,
-				jack_client_thread, client)) {
-		return -1;
-	}
 
-#endif
 
-#ifdef JACK_USE_MACH_THREADS
+
 
 	/* a secondary thread that runs the process callback and uses
 	   ultra-fast Mach primitives for inter-thread signalling.
@@ -1957,6 +2102,7 @@ jack_start_thread (jack_client_t *client)
 
 	*/
 
+	if (client->control->process_cbset) {
 	if (jack_client_create_thread(client,
 				      &client->process_thread,
 				      client->engine->client_priority,
@@ -1964,7 +2110,7 @@ jack_start_thread (jack_client_t *client)
 				      jack_client_process_thread, client)) {
 		return -1;
 	}
-#endif /* JACK_USE_MACH_THREADS */
+	}
 
 	return 0;
 }
