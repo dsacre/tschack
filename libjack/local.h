@@ -9,11 +9,11 @@ struct _jack_client {
     jack_shm_info_t        engine_shm;
     jack_shm_info_t        control_shm;
 
-    struct pollfd*  pollfd;
+    struct pollfd*  pollfd_array[2];
     int             pollmax;
-    int             graph_next_fd;
+    int             graph_next_fd_array[2];
     int             request_fd;
-    int             upstream_is_jackd;
+    int             upstream_is_jackd_array[2];
     int	            process_pipe[2];
 
     /* these two are copied from the engine when the 

@@ -401,6 +401,18 @@ jack_client_internal_by_id (jack_engine_t *engine, jack_client_id_t id)
 	return client;
 }
 
+int
+jack_client_name_reserved( jack_engine_t *engine, const char *name )
+{
+	JSList *node;
+        for (node = engine->reserved_client_names; node; node = jack_slist_next (node)) {
+		jack_reserved_name_t *reservation = (jack_reserved_name_t *) node->data;
+		if( !strcmp( reservation->name, name ) )
+			return 1;
+	}
+	return 0;
+}
+
 /* generate a unique client name
  *
  * returns 0 if successful, updates name in place
@@ -526,8 +538,10 @@ jack_setup_client_control (jack_engine_t *engine, int fd,
 	client->control->timed_out = 0;
 	client->control->id = engine->next_client_id++;
 	strcpy ((char *) client->control->name, name);
-	client->subgraph_start_fd = -1;
-	client->subgraph_wait_fd = -1;
+	client->subgraph_start_fd_array[0] = -1;
+	client->subgraph_start_fd_array[1] = -1;
+	client->subgraph_wait_fd_array[0] = -1;
+	client->subgraph_wait_fd_array[1] = -1;
 
 	client->control->process_cbset = FALSE;
 	client->control->bufsize_cbset = FALSE;
@@ -815,6 +829,7 @@ jack_client_activate (jack_engine_t *engine, jack_client_id_t id)
 	jack_client_internal_t *client;
 	JSList *node;
 	int ret = -1;
+	int setup_chain = (engine->control->current_process_chain+1)&1;
 
 	jack_lock_graph (engine);
 
@@ -834,8 +849,8 @@ jack_client_activate (jack_engine_t *engine, jack_client_id_t id)
 			 * this point.
 			 */
 
-			jack_get_fifo_fd (engine,
-					  ++engine->external_client_cnt);
+			jack_get_fifo_fd (engine, ++engine->external_client_cnt, 0);
+			jack_get_fifo_fd (engine, engine->external_client_cnt, 1);
 			jack_sort_graph (engine);
 
 			ret = 0;

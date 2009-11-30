@@ -86,7 +86,7 @@ static int                    jack_port_assign_buffer (jack_engine_t *,
 static jack_port_internal_t *jack_get_port_by_name (jack_engine_t *,
 						    const char *name);
 static int  jack_rechain_graph (jack_engine_t *engine);
-static void jack_clear_fifos (jack_engine_t *engine);
+static void jack_clear_fifos (jack_engine_t *engine, unsigned int which_chain);
 static int  jack_port_do_connect (jack_engine_t *engine,
 				  const char *source_port,
 				  const char *destination_port);
@@ -675,6 +675,7 @@ jack_process_external(jack_engine_t *engine, JSList *node)
 	jack_client_control_t *ctl;
 	jack_time_t now, then;
 	int pollret;
+	int curr_chain = engine->control->current_process_chain;
 
 	client = (jack_client_internal_t *) node->data;
 	
@@ -692,7 +693,7 @@ jack_process_external(jack_engine_t *engine, JSList *node)
 	DEBUG ("calling process() on an external subgraph, fd==%d",
 	       client->subgraph_start_fd);
 
-	if (write (client->subgraph_start_fd, &c, sizeof (c)) != sizeof (c)) {
+	if (write (client->subgraph_start_fd_array[curr_chain], &c, sizeof (c)) != sizeof (c)) {
 		jack_error ("cannot initiate graph processing (%s)",
 			    strerror (errno));
 		engine->process_errors++;
@@ -712,7 +713,7 @@ jack_process_external(jack_engine_t *engine, JSList *node)
 
      again:
 	poll_timeout = 1 + poll_timeout_usecs / 1000;
-	pfd[0].fd = client->subgraph_wait_fd;
+	pfd[0].fd = client->subgraph_wait_fd_array[curr_chain];
 	pfd[0].events = POLLERR|POLLIN|POLLHUP|POLLNVAL;
 
 	DEBUG ("waiting on fd==%d for process() subgraph to finish (timeout = %d, period_usecs = %d)",
@@ -755,7 +756,7 @@ jack_process_external(jack_engine_t *engine, JSList *node)
 		jack_error ("subgraph starting at %s timed out "
 			    "(subgraph_wait_fd=%d, status = %d, state = %s, pollret = %d revents = 0x%x)", 
 			    client->control->name,
-			    client->subgraph_wait_fd, status, 
+			    client->subgraph_wait_fd_array[curr_chain], status, 
 			    jack_client_state_name (client),
 			    pollret, pfd[0].revents);
 		status = 1;
@@ -773,7 +774,7 @@ jack_process_external(jack_engine_t *engine, JSList *node)
 			 " awa = %" PRIu64 " fin = %" PRIu64
 			 " dur=%" PRIu64,
 			 now,
-			 client->subgraph_wait_fd,
+			 client->subgraph_wait_fd_array[curr_chain],
 			 now - then,
 			 status,
 			 ctl->signalled_at,
@@ -792,7 +793,7 @@ jack_process_external(jack_engine_t *engine, JSList *node)
 		DEBUG ("reading byte from subgraph_wait_fd==%d",
 		       client->subgraph_wait_fd);
 
-		if (read (client->subgraph_wait_fd, &c, sizeof(c))
+		if (read (client->subgraph_wait_fd_array[curr_chain], &c, sizeof(c))
 		    != sizeof (c)) {
 			jack_error ("pp: cannot clean up byte from graph wait "
 				    "fd (%s)", strerror (errno));
@@ -1747,14 +1748,25 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 
 	engine->clients = 0;
 
+	engine->process_graph_list[0] = 0;
+	engine->process_graph_list[1] = 0;
+	pthread_mutex_init( &engine->process_graph_mutex[0], NULL );
+	pthread_mutex_init( &engine->process_graph_mutex[1], NULL );
+
+
 	engine->pfd_size = 0;
 	engine->pfd_max = 0;
 	engine->pfd = 0;
 
-	engine->fifo_size = 16;
-	engine->fifo = (int *) malloc (sizeof (int) * engine->fifo_size);
-	for (i = 0; i < engine->fifo_size; i++) {
-		engine->fifo[i] = -1;
+	engine->fifo_size_a[0] = 16;
+	engine->fifo_size_a[1] = 16;
+	engine->fifo_array[0] = (int *) malloc (sizeof (int) * engine->fifo_size_a[0]);
+	for (i = 0; i < engine->fifo_size_a[0]; i++) {
+		engine->fifo_array[0][i] = -1;
+	}
+	engine->fifo_array[1] = (int *) malloc (sizeof (int) * engine->fifo_size_a[1]);
+	for (i = 0; i < engine->fifo_size_a[1]; i++) {
+		engine->fifo_array[1][i] = -1;
 	}
 
 	if (pipe (engine->cleanup_fifo)) {
@@ -1881,6 +1893,7 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	engine->control->frame_timer.initialized = 0;
 	engine->control->frame_timer.filter_coefficient = 0.01;
 	engine->control->frame_timer.second_order_integrator = 0;
+	engine->control->current_process_chain = 0;
 
 	engine->first_wakeup = 1;
 
@@ -1931,7 +1944,8 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 		  "%s/jack-ack-fifo-%d",
 		  jack_server_dir (engine->server_name, server_dir), getpid ());
 
-	(void) jack_get_fifo_fd (engine, 0);
+	(void) jack_get_fifo_fd (engine, 0, 0);
+	(void) jack_get_fifo_fd (engine, 0, 1);
 
 	jack_client_create_thread (NULL, &engine->server_thread, 0, FALSE,
 				   &jack_server_thread, engine);
@@ -2648,8 +2662,9 @@ jack_rechain_graph (jack_engine_t *engine)
 	jack_client_internal_t *client, *subgraph_client, *next_client;
 	jack_event_t event;
 	int upstream_is_jackd;
+	int setup_chain = (engine->control->current_process_chain+1)&1;
 
-	jack_clear_fifos (engine);
+	jack_clear_fifos (engine, setup_chain);
 
 	subgraph_client = 0;
 
@@ -2703,15 +2718,15 @@ jack_rechain_graph (jack_engine_t *engine)
 				 * client. */
 				
 				if (subgraph_client) {
-					subgraph_client->subgraph_wait_fd =
-						jack_get_fifo_fd (engine, n);
+					subgraph_client->subgraph_wait_fd_array[setup_chain] =
+						jack_get_fifo_fd (engine, n, setup_chain);
 					VERBOSE (engine, "client %s: wait_fd="
 						 "%d, execution_order="
 						 "%lu.", 
 						 subgraph_client->
 						 control->name,
 						 subgraph_client->
-						 subgraph_wait_fd, n);
+						 subgraph_wait_fd_array[setup_chain], n);
 					n++;
 				}
 
@@ -2739,15 +2754,15 @@ jack_rechain_graph (jack_engine_t *engine)
 					 */
 					
 					subgraph_client = client;
-					subgraph_client->subgraph_start_fd =
-						jack_get_fifo_fd (engine, n);
+					subgraph_client->subgraph_start_fd_array[setup_chain] =
+						jack_get_fifo_fd (engine, n, setup_chain);
 					VERBOSE (engine, "client %s: "
 						 "start_fd=%d, execution"
 						 "_order=%lu.",
 						 subgraph_client->
 						 control->name,
 						 subgraph_client->
-						 subgraph_start_fd, n);
+						 subgraph_start_fd_array[setup_chain], n);
 					
 					/* this external client after
 					   this will have jackd as its
@@ -2765,7 +2780,7 @@ jack_rechain_graph (jack_engine_t *engine)
 						 client->control->name,
 						 subgraph_client->
 						 control->name, n);
-					subgraph_client->subgraph_wait_fd = -1;
+					subgraph_client->subgraph_wait_fd_array[setup_chain] = -1;
 					
 					/* this external client after
 					   this will have another
@@ -2780,7 +2795,7 @@ jack_rechain_graph (jack_engine_t *engine)
 				 * before issuing client reorder
 				 */
 				(void) jack_get_fifo_fd(
-					engine, client->execution_order + 1);
+					engine, client->execution_order + 1, setup_chain);
 				event.x.n = client->execution_order;
 				event.y.n = upstream_is_jackd;
 				jack_deliver_event (engine, client, &event);
@@ -2790,12 +2805,12 @@ jack_rechain_graph (jack_engine_t *engine)
 	}
 
 	if (subgraph_client) {
-		subgraph_client->subgraph_wait_fd =
-			jack_get_fifo_fd (engine, n);
+		subgraph_client->subgraph_wait_fd_array[setup_chain] =
+			jack_get_fifo_fd (engine, n, setup_chain);
 		VERBOSE (engine, "client %s: wait_fd=%d, "
 			 "execution_order=%lu (last client).", 
 			 subgraph_client->control->name,
-			 subgraph_client->subgraph_wait_fd, n);
+			 subgraph_client->subgraph_wait_fd_array[setup_chain], n);
 	}
 
 	VERBOSE (engine, "-- jack_rechain_graph()");
@@ -3149,6 +3164,7 @@ void jack_dump_configuration(jack_engine_t *engine, int take_lock)
 	jack_port_internal_t *port;
 	jack_connection_internal_t* connection;
 	int n, m, o;
+	int curr_chain = engine->control->current_process_chain;
 	
 	jack_info ("engine.c: <-- dump begins -->");
 
@@ -3167,8 +3183,8 @@ void jack_dump_configuration(jack_engine_t *engine, int take_lock)
 			 ctl->name,
 			 ctl->type,
 			 ctl->process_cbset ? "yes" : "no",
-			 client->subgraph_start_fd,
-			 client->subgraph_wait_fd);
+			 client->subgraph_start_fd_array[curr_chain],
+			 client->subgraph_wait_fd_array[curr_chain]);
 
 		for(m = 0, portnode = client->ports; portnode;
 		    portnode = jack_slist_next (portnode)) {
@@ -3564,13 +3580,13 @@ jack_port_do_disconnect (jack_engine_t *engine,
 }
 
 int 
-jack_get_fifo_fd (jack_engine_t *engine, unsigned int which_fifo)
+jack_get_fifo_fd (jack_engine_t *engine, unsigned int which_fifo, unsigned int which_chain)
 {
 	/* caller must hold client_lock */
 	char path[PATH_MAX+1];
 	struct stat statbuf;
 
-	snprintf (path, sizeof (path), "%s-%d", engine->fifo_prefix,
+	snprintf (path, sizeof (path), "%s-%d-%d", engine->fifo_prefix, which_chain,
 		  which_fifo);
 
 	DEBUG ("%s", path);
@@ -3586,45 +3602,45 @@ jack_get_fifo_fd (jack_engine_t *engine, unsigned int which_fifo)
 			}
 
 		} else {
-			jack_error ("cannot check on FIFO %d\n", which_fifo);
+			jack_error ("cannot check on FIFO %d in chain %d\n", which_fifo, which_chain);
 			return -1;
 		}
 	} else {
 		if (!S_ISFIFO(statbuf.st_mode)) {
-			jack_error ("FIFO %d (%s) already exists, but is not"
-				    " a FIFO!\n", which_fifo, path);
+			jack_error ("chain %d FIFO %d (%s) already exists, but is not"
+				    " a FIFO!\n", which_chain, which_fifo, path);
 			return -1;
 		}
 	}
 
-	if (which_fifo >= engine->fifo_size) {
+	if (which_fifo >= engine->fifo_size_a[which_chain]) {
 		unsigned int i;
 
-		engine->fifo = (int *)
-			realloc (engine->fifo,
-				 sizeof (int) * (engine->fifo_size + 16));
-		for (i = engine->fifo_size; i < engine->fifo_size + 16; i++) {
-			engine->fifo[i] = -1;
+		engine->fifo_array[which_chain] = (int *)
+			realloc (engine->fifo_array[which_chain],
+				 sizeof (int) * (engine->fifo_size_a[which_chain] + 16));
+		for (i = engine->fifo_size_a[which_chain]; i < engine->fifo_size_a[which_chain] + 16; i++) {
+			engine->fifo_array[which_chain][i] = -1;
 		}
-		engine->fifo_size += 16;
+		engine->fifo_size_a[which_chain] += 16;
 	}
 
-	if (engine->fifo[which_fifo] < 0) {
-		if ((engine->fifo[which_fifo] =
+	if (engine->fifo_array[which_chain][which_fifo] < 0) {
+		if ((engine->fifo_array[which_chain][which_fifo] =
 		     open (path, O_RDWR|O_CREAT|O_NONBLOCK, 0666)) < 0) {
 			jack_error ("cannot open fifo [%s] (%s)", path,
 				    strerror (errno));
 			return -1;
 		}
 		DEBUG ("opened engine->fifo[%d] == %d (%s)",
-		       which_fifo, engine->fifo[which_fifo], path);
+		       which_fifo, engine->fifo_array[which_chain][which_fifo], path);
 	}
 
-	return engine->fifo[which_fifo];
+	return engine->fifo_array[which_chain][which_fifo];
 }
 
 static void
-jack_clear_fifos (jack_engine_t *engine)
+jack_clear_fifos (jack_engine_t *engine, unsigned int which_chain)
 {
 	/* caller must hold client_lock */
 
@@ -3635,9 +3651,9 @@ jack_clear_fifos (jack_engine_t *engine)
 	   them by aborted clients, etc. there is only ever going to
 	   be 0, 1 or 2 bytes in them, but we'll allow for up to 16.
 	*/
-	for (i = 0; i < engine->fifo_size; i++) {
-		if (engine->fifo[i] >= 0) {
-			int nread = read (engine->fifo[i], buf, sizeof (buf));
+	for (i = 0; i < engine->fifo_size_a[which_chain]; i++) {
+		if (engine->fifo_array[which_chain][i] >= 0) {
+			int nread = read (engine->fifo_array[which_chain][i], buf, sizeof (buf));
 
 			if (nread < 0 && errno != EAGAIN) {
 				jack_error ("clear fifo[%d] error: %s",
@@ -3676,7 +3692,6 @@ jack_use_driver (jack_engine_t *engine, jack_driver_t *driver)
 
 static jack_port_id_t
 jack_get_free_port (jack_engine_t *engine)
-
 {
 	jack_port_id_t i;
 

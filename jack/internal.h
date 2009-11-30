@@ -198,6 +198,7 @@ typedef struct {
     float		  max_delayed_usecs;
     uint32_t		  port_max;
     int32_t		  engine_ok;
+    int32_t		  current_process_chain;
     jack_port_type_id_t	  n_port_types;
     jack_port_type_info_t port_types[JACK_MAX_PORT_TYPES];
     jack_port_shared_t    ports[0];
@@ -433,8 +434,8 @@ typedef struct _jack_client_internal {
 
     int        request_fd;
     int        event_fd;
-    int        subgraph_start_fd;
-    int        subgraph_wait_fd;
+    int        subgraph_start_fd_array[2];
+    int        subgraph_wait_fd_array[2];
     JSList    *ports;    /* protected by engine->client_lock */
     JSList    *truefeeds;    /* protected by engine->client_lock */
     JSList    *sortfeeds;    /* protected by engine->client_lock */

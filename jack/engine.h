@@ -107,8 +107,8 @@ struct _jack_engine {
     size_t	    pfd_max;
     struct pollfd  *pfd;
     char	    fifo_prefix[PATH_MAX+1];
-    int		   *fifo;
-    unsigned long   fifo_size;
+    int		   *fifo_array[2];
+    unsigned long   fifo_size_a[2];
     unsigned long   external_client_cnt;
     int		    rtpriority;
     char	    freewheeling;
@@ -128,6 +128,10 @@ struct _jack_engine {
     /* these lists are protected by `client_lock' */
     JSList	   *clients;
     JSList	   *clients_waiting;
+
+    JSList	   *process_graph_list[2];
+    pthread_mutex_t process_graph_mutex[2];
+
 
     jack_port_internal_t    *internal_ports;
     jack_client_internal_t  *timebase_client;
@@ -180,7 +184,7 @@ void		jack_dump_configuration(jack_engine_t *engine, int take_lock);
 void		jack_engine_reset_rolling_usecs (jack_engine_t *engine);
 int		internal_client_request (void* ptr, jack_request_t *request);
 int		jack_get_fifo_fd (jack_engine_t *engine,
-				  unsigned int which_fifo);
+				  unsigned int which_fifo, unsigned int which_chain);
 
 extern jack_timer_type_t clock_source;
 
