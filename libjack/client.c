@@ -1783,15 +1783,6 @@ jack_process_thread_aux (void *arg)
 	jack_client_t *client = (jack_client_t *) arg;
 	jack_client_control_t *control = client->control;
 
-	pthread_mutex_lock (&client_lock);
-	client->thread_ok = TRUE;
-	client->thread_id = pthread_self();
-	pthread_cond_signal (&client_ready);
-	pthread_mutex_unlock (&client_lock);
-
-	control->pid = getpid();
-	control->pgrp = getpgrp();
-
 	DEBUG ("client thread is now running");
 
 	if (control->thread_init_cbset) {
@@ -1837,7 +1828,24 @@ static void *
 jack_client_thread (void *arg)
 {
 	jack_client_t *client = (jack_client_t *) arg;
-	//jack_client_control_t *control = client->control;
+
+	if( client->control->process_cbset ) {
+		// lets wait for the process thread
+		// when its ready to go, the process_mutex
+		// is unlocked.
+		pthread_mutex_lock( &client->process_mutex );
+		pthread_mutex_unlock( &client->process_mutex );
+	}
+
+	// ok... everybody is ready to go. signal main thread.
+	pthread_mutex_lock (&client_lock);
+	client->thread_ok = TRUE;
+	client->thread_id = pthread_self();
+	pthread_cond_signal (&client_ready);
+	pthread_mutex_unlock (&client_lock);
+
+	client->control->pid = getpid();
+	client->control->pgrp = getpgrp();
 
 	jack_client_event_loop( client );
 	jack_client_thread_suicide (client);
@@ -1848,19 +1856,8 @@ static void *
 jack_client_process_thread (void *arg)
 {
 	jack_client_t *client = (jack_client_t *) arg;
-	jack_client_control_t *control = client->control;
 	
 	if (client->control->thread_cb_cbset) {
-	
-		pthread_mutex_lock (&client_lock);
-		client->thread_ok = TRUE;
-		client->thread_id = pthread_self();
-		pthread_cond_signal (&client_ready);
-		pthread_mutex_unlock (&client_lock);
-
-		control->pid = getpid();
-		control->pgrp = getpgrp();
-
 		client->thread_cb(client->thread_cb_arg);
 		jack_client_thread_suicide(client);
 	} else {
@@ -2020,6 +2017,8 @@ jack_start_thread (jack_client_t *client)
 				      jack_client_process_thread, client)) {
 		return -1;
 	}
+	} else {
+		pthread_mutex_unlock( &client->process_mutex );
 	}
 
 	return 0;
