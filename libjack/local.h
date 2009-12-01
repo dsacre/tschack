@@ -16,6 +16,9 @@ struct _jack_client {
     int             upstream_is_jackd_array[2];
     int	            process_pipe[2];
 
+    volatile int    chain_override;
+    volatile int    last_wakeup_chain;
+
     /* these two are copied from the engine when the 
      * client is created.
     */

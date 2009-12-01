@@ -690,8 +690,8 @@ jack_process_external(jack_engine_t *engine, JSList *node)
 
 	engine->current_client = client;
 
-	DEBUG ("calling process() on an external subgraph, fd==%d",
-	       client->subgraph_start_fd);
+	DEBUG ("calling process() on an external subgraph, fd==%d chain==%d",
+	       client->subgraph_start_fd_array[curr_chain], curr_chain);
 
 	if (write (client->subgraph_start_fd_array[curr_chain], &c, sizeof (c)) != sizeof (c)) {
 		jack_error ("cannot initiate graph processing (%s)",
@@ -716,8 +716,8 @@ jack_process_external(jack_engine_t *engine, JSList *node)
 	pfd[0].fd = client->subgraph_wait_fd_array[curr_chain];
 	pfd[0].events = POLLERR|POLLIN|POLLHUP|POLLNVAL;
 
-	DEBUG ("waiting on fd==%d for process() subgraph to finish (timeout = %d, period_usecs = %d)",
-	       client->subgraph_wait_fd, poll_timeout, engine->driver->period_usecs);
+	DEBUG ("waiting on fd==%d chain==%d for process() subgraph to finish (timeout = %d, period_usecs = %d)",
+	       client->subgraph_wait_fd_array[curr_chain], curr_chain, poll_timeout, engine->driver->period_usecs);
 
 	if ((pollret = poll (pfd, 1, poll_timeout)) < 0) {
 		jack_error ("poll on subgraph processing failed (%s)",
@@ -790,8 +790,8 @@ jack_process_external(jack_engine_t *engine, JSList *node)
 
 	} else {
 
-		DEBUG ("reading byte from subgraph_wait_fd==%d",
-		       client->subgraph_wait_fd);
+		DEBUG ("reading byte from subgraph_wait_fd==%d chain=%d",
+		       client->subgraph_wait_fd_array[curr_chain], curr_chain);
 
 		if (read (client->subgraph_wait_fd_array[curr_chain], &c, sizeof(c))
 		    != sizeof (c)) {
@@ -819,14 +819,15 @@ jack_process_external(jack_engine_t *engine, JSList *node)
 static int
 jack_engine_process (jack_engine_t *engine, jack_nframes_t nframes)
 {
-	/* precondition: caller has graph_lock */
+	/* precondition: caller has current chain lock */
 	jack_client_internal_t *client;
 	JSList *node;
+	int curr_chain = engine->control->current_process_chain; 
 
 	engine->process_errors = 0;
 	engine->watchdog_check = 1;
 
-	for (node = engine->clients; node; node = jack_slist_next (node)) {
+	for (node = engine->process_graph_list[curr_chain]; node; node = jack_slist_next (node)) {
 		jack_client_control_t *ctl =
 			((jack_client_internal_t *) node->data)->control;
 		ctl->state = NotTriggered;
@@ -836,7 +837,7 @@ jack_engine_process (jack_engine_t *engine, jack_nframes_t nframes)
 		ctl->finished_at = 0;
 	}
 
-	for (node = engine->clients; engine->process_errors == 0 && node; ) {
+	for (node = engine->process_graph_list[curr_chain]; engine->process_errors == 0 && node; ) {
 
 		client = (jack_client_internal_t *) node->data;
 		
@@ -1752,6 +1753,7 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	engine->process_graph_list[1] = 0;
 	pthread_mutex_init( &engine->process_graph_mutex[0], NULL );
 	pthread_mutex_init( &engine->process_graph_mutex[1], NULL );
+	engine->pending_chain = 0;
 
 
 	engine->pfd_size = 0;
@@ -1894,6 +1896,7 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	engine->control->frame_timer.filter_coefficient = 0.01;
 	engine->control->frame_timer.second_order_integrator = 0;
 	engine->control->current_process_chain = 0;
+	engine->control->next_process_chain = 0;
 
 	engine->first_wakeup = 1;
 
@@ -2114,6 +2117,21 @@ jack_run_one_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 	jack_driver_t* driver = engine->driver;
 	int ret = -1;
 	static int consecutive_excessive_delays = 0;
+	int curr_chain;
+
+	// promote chain changes.
+	if( engine->control->current_process_chain != engine->control->next_process_chain ) {
+		// we need to signal the server thread here that we switched chain.
+		pthread_mutex_unlock ( & engine->process_graph_mutex[engine->control->current_process_chain] );
+		pthread_mutex_lock ( & engine->process_graph_mutex[engine->control->next_process_chain] );
+		VERBOSE( engine, "======= chain switch nextchain: %d", engine->control->next_process_chain ); 
+	}
+	engine->control->current_process_chain = engine->control->next_process_chain;
+	engine->control->next_process_chain = engine->pending_chain;
+
+	curr_chain = engine->control->current_process_chain;
+
+	VERBOSE( engine, "running cycle for chain %d", curr_chain ); 
 
 #define WORK_SCALE 1.0f
 
@@ -2139,16 +2157,8 @@ jack_run_one_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 		consecutive_excessive_delays = 0;
 	}
 
-	DEBUG ("trying to acquire read lock");
-	if (jack_try_rdlock_graph (engine)) {
-		VERBOSE (engine, "lock-driven null cycle");
-		driver->null_cycle (driver, nframes);
-		return 0;
-	}
-
 	if (jack_trylock_problems (engine)) {
 		VERBOSE (engine, "problem-lock-driven null cycle");
-		jack_unlock_graph (engine);
 		driver->null_cycle (driver, nframes);
 		return 0;
 	}
@@ -2156,7 +2166,6 @@ jack_run_one_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 	if (engine->problems) {
 		VERBOSE (engine, "problem-driven null cycle problems=%d", engine->problems);
 		jack_unlock_problems (engine);
-		jack_unlock_graph (engine);
 		driver->null_cycle (driver, nframes);
 		return 0;
 	}
@@ -2189,7 +2198,7 @@ jack_run_one_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 		   clients.
 		*/
 
-		for (node = engine->clients; node;
+		for (node = engine->process_graph_list[curr_chain]; node;
 		     node = jack_slist_next (node)) {
 			jack_client_internal_t *client =
 				(jack_client_internal_t *) node->data;
@@ -2222,7 +2231,6 @@ jack_run_one_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 	ret = 0;
 
   unlock:
-	jack_unlock_graph (engine);
 	DEBUG("cycle finished, status = %d", ret);
 
 	return ret;
@@ -2257,6 +2265,7 @@ jack_run_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 
 		/* the first wakeup */
 
+
 		timer->next_wakeup = 
 			engine->driver->last_wait_ust +
 			engine->driver->period_usecs;
@@ -2271,6 +2280,9 @@ jack_run_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 			timer->reset_pending = 0;
 			no_increment = 1;
 		}
+
+		// we need to need to keep the current chain locked, all the time.
+		pthread_mutex_lock( &engine->process_graph_mutex[engine->control->current_process_chain] );
 	}
 
 	if (timer->reset_pending) {
@@ -2663,6 +2675,7 @@ jack_rechain_graph (jack_engine_t *engine)
 	jack_event_t event;
 	int upstream_is_jackd;
 	int setup_chain = (engine->control->current_process_chain+1)&1;
+	int curr_chain = engine->control->current_process_chain;
 
 	jack_clear_fifos (engine, setup_chain);
 
@@ -2671,6 +2684,11 @@ jack_rechain_graph (jack_engine_t *engine)
 	VERBOSE(engine, "++ jack_rechain_graph():");
 
 	event.type = GraphReordered;
+
+	pthread_mutex_lock( & engine->process_graph_mutex[setup_chain] );
+
+	jack_slist_free( engine->process_graph_list[setup_chain] );
+	engine->process_graph_list[setup_chain] = NULL;
 
 	for (n = 0, node = engine->clients, next = NULL; node; node = next) {
 
@@ -2688,6 +2706,8 @@ jack_rechain_graph (jack_engine_t *engine)
 
 			client = (jack_client_internal_t *) node->data;
 
+			engine->process_graph_list[setup_chain] = 
+				jack_slist_append( engine->process_graph_list[setup_chain], client );
 			/* find the next active client. its ok for
 			 * this to be NULL */
 			
@@ -2812,6 +2832,15 @@ jack_rechain_graph (jack_engine_t *engine)
 			 subgraph_client->control->name,
 			 subgraph_client->subgraph_wait_fd_array[setup_chain], n);
 	}
+
+	// chain is setup.
+	// now we need to trigger the swap.
+	pthread_mutex_unlock( & engine->process_graph_mutex[setup_chain] );
+
+	engine->pending_chain = setup_chain;
+
+	VERBOSE (engine, "chain swap triggered...");
+
 
 	VERBOSE (engine, "-- jack_rechain_graph()");
 

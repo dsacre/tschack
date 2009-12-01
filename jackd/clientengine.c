@@ -170,12 +170,14 @@ void
 jack_check_clients (jack_engine_t* engine, int with_timeout_check)
 {
 	/* CALLER MUST HOLD graph read lock */
+	
 
 	JSList* node;
 	jack_client_internal_t* client;
 	int errs = 0;
+	int curr_chain = engine->control->current_process_chain;
 
-	for (node = engine->clients; node; node = jack_slist_next (node)) {
+	for (node = engine->process_graph_list[curr_chain]; node; node = jack_slist_next (node)) {
 
 		client = (jack_client_internal_t *) node->data;
 

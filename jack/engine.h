@@ -124,6 +124,7 @@ struct _jack_engine {
     pthread_t       freewheel_thread;
     int             nozombies;
     volatile int    problems;
+    volatile int    pending_chain;
 
     /* these lists are protected by `client_lock' */
     JSList	   *clients;
