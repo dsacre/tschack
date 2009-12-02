@@ -2839,8 +2839,10 @@ jack_rechain_graph (jack_engine_t *engine)
 	pthread_mutex_unlock( & engine->process_graph_mutex[setup_chain] );
 
 	engine->pending_chain = setup_chain;
-
 	VERBOSE (engine, "chain swap triggered...");
+	pthread_mutex_lock( & engine->process_graph_mutex[curr_chain] );
+	pthread_mutex_unlock( & engine->process_graph_mutex[curr_chain] );
+
 
 
 	VERBOSE (engine, "-- jack_rechain_graph()");
