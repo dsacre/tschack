@@ -2190,8 +2190,16 @@ jack_client_close_aux (jack_client_t *client)
 				pthread_mach_thread_np (client->process_thread);
 			thread_terminate (machThread);
 		}
-#endif
+#else
+		if (client->control->process_cbset) {
+			pthread_mutex_lock( &client->process_mutex );
+			pthread_cancel (client->process_thread);
+			pthread_cond_signal( &client->process_wakeup );
+			pthread_mutex_unlock( &client->process_mutex );
+			pthread_join (client->process_thread, &status);
+		}
 	
+#endif
 		/* stop the thread that communicates with the jack
 		 * server, only if it was actually running 
 		 */
