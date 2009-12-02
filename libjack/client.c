@@ -408,7 +408,8 @@ static void
 jack_client_free (jack_client_t *client)
 {
 	if (client->pollfd_array) {
-		free (client->pollfd_array);
+		free (client->pollfd_array[0]);
+		free (client->pollfd_array[1]);
 	}
 
 	free (client);
