@@ -198,6 +198,7 @@ typedef struct {
     float		  max_delayed_usecs;
     uint32_t		  port_max;
     int32_t		  engine_ok;
+    int32_t		  problems;
     volatile int32_t	  current_process_chain;
     volatile int32_t	  next_process_chain;
     jack_port_type_id_t	  n_port_types;

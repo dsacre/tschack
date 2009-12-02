@@ -289,7 +289,9 @@ jack_remove_clients (jack_engine_t* engine)
 	}
 
 	if (need_sort) {
+		engine->control->problems = 1;
 		jack_sort_graph (engine);
+		engine->control->problems = 0;
 	}
 	
 	jack_engine_reset_rolling_usecs (engine);

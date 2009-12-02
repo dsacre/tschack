@@ -540,12 +540,17 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 	jack_error( "reorder for chain %d next chain: %d", setup_chain, client->engine->next_process_chain );
 
 	if (client->graph_wait_fd(setup_chain) >= 0) {
-		char c=0;
 		DEBUG ("closing graph_wait_fd==%d", client->graph_wait_fd(setup_chain));
 		close (client->graph_wait_fd(setup_chain));
 		client->graph_wait_fd(setup_chain) = -1;
 	} 
 
+	if (client->engine->problems) {
+		char c=0;
+		write( client->process_pipe[1], &c, 1 );
+		pthread_mutex_lock( &client->process_mutex );
+		pthread_mutex_unlock( &client->process_mutex );
+	}
 
 	if (client->graph_next_fd_array[setup_chain] >= 0) {
 		DEBUG ("closing graph_next_fd==%d", client->graph_next_fd_array[setup_chain]);

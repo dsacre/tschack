@@ -1880,6 +1880,7 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	engine->control->cpu_load = 0;
 	engine->control->xrun_delayed_usecs = 0;
 	engine->control->max_delayed_usecs = 0;
+	engine->control->problems = 0;
 
 	jack_set_clock_source (clock_source);
 	engine->control->clock_source = clock_source;
