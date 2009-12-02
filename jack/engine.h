@@ -128,7 +128,6 @@ struct _jack_engine {
 
     /* these lists are protected by `client_lock' */
     JSList	   *clients;
-    JSList	   *clients_waiting;
 
     JSList	   *process_graph_list[2];
     pthread_mutex_t process_graph_mutex[2];
