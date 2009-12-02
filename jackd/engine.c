@@ -842,7 +842,7 @@ jack_engine_process (jack_engine_t *engine, jack_nframes_t nframes)
 		DEBUG ("considering client %s for processing",
 		       client->control->name);
 
-		if (!client->control->active || !client->control->process_cbset || client->control->dead) {
+		if ( !client->control->process_cbset || client->control->dead) {
 			node = jack_slist_next (node);
 		} else if (jack_client_is_internal (client)) {
 			node = jack_process_internal (engine, node, nframes);

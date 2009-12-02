@@ -75,6 +75,14 @@ jack_client_do_deactivate (jack_engine_t *engine,
 	 */
 	VERBOSE(engine,"+++ deactivate %s", client->control->name);
 
+	if (!jack_client_is_internal (client) ) {
+		DEBUG( "sending disorder event" );
+		event.type = GraphReordered;
+		event.x.n  = -1;
+		event.y.n = -1;
+		jack_deliver_event (engine, client, &event);
+	}
+
 	client->control->active = FALSE;
 
 	jack_transport_client_exit (engine, client);
@@ -82,11 +90,6 @@ jack_client_do_deactivate (jack_engine_t *engine,
 	if (!jack_client_is_internal (client) &&
 	    engine->external_client_cnt > 0) {	
 		engine->external_client_cnt--;
-
-		event.type = GraphReordered;
-		event.x.n  = -1;
-		event.y.n = 0;
-		jack_deliver_event (engine, client, &event);
 	}
 	
 

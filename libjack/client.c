@@ -536,7 +536,7 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 	char path[PATH_MAX+1];
 	int setup_chain = (client->engine->current_process_chain+1)&1;
 
-	DEBUG ("graph reorder\n");
+	DEBUG ("graph reorder... n=%d\n", event->x.n );
 	jack_error( "reorder for chain %d next chain: %d", setup_chain, client->engine->next_process_chain );
 
 	if (client->graph_wait_fd(setup_chain) >= 0) {
@@ -1558,9 +1558,10 @@ jack_client_graph_wait( jack_client_t* client )
 			client->chain_override = -1;
 			jack_error( "chain override %d", curr_chain );
 		}
+		DEBUG( "waiting on chain %d fd is %d", curr_chain, client->pollfd_array[curr_chain][WAIT_POLL_INDEX].fd );
 
 		if (client->graph_wait_fd(curr_chain) >= 0 ) { 
-			if (poll (& client->pollfd_array[curr_chain][PROCESS_PIPE_INDEX], 2, 1000) < 0) {
+			if (poll (& (client->pollfd_array[curr_chain][PROCESS_PIPE_INDEX]), 2, 1000) < 0) {
 				if (errno == EINTR) {
 					continue;
 				}
@@ -1572,8 +1573,11 @@ jack_client_graph_wait( jack_client_t* client )
 				char c;
 				read( client->process_pipe_fd(0), &c, 1 );
 			}
+		} else {
+			DEBUG( "not polling, fd = -1" );
 		}
 
+		DEBUG( "return from poll in chain %d", curr_chain );
 		pthread_testcancel();
 
 		
@@ -1884,6 +1888,7 @@ jack_client_thread (void *arg)
 
 	return (void *) 0;
 }
+
 static void *
 jack_client_process_thread (void *arg)
 {
@@ -2191,7 +2196,9 @@ jack_client_close_aux (jack_client_t *client)
 			thread_terminate (machThread);
 		}
 #else
+		jack_error( "shutdown sequence..." );
 		if (client->control->process_cbset) {
+
 			pthread_mutex_lock( &client->process_mutex );
 			pthread_cancel (client->process_thread);
 			pthread_cond_signal( &client->process_wakeup );
