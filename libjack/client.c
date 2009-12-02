@@ -543,7 +543,6 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 		DEBUG ("closing graph_wait_fd==%d", client->graph_wait_fd(setup_chain));
 		close (client->graph_wait_fd(setup_chain));
 		client->graph_wait_fd(setup_chain) = -1;
-
 	} 
 
 
@@ -553,33 +552,31 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 		client->graph_next_fd_array[setup_chain] = -1;
 	}
 
-	sprintf (path, "%s-%d-%d", client->fifo_prefix, setup_chain, event->x.n);
-	
-	int bla = open (path, O_RDONLY|O_NONBLOCK);
-	DEBUG ("opened new graph_wait_fd bla = %d (%s)", bla, path);
+	if (event->x.n != -1) {
+		sprintf (path, "%s-%d-%d", client->fifo_prefix, setup_chain, event->x.n);
 
-	client->graph_wait_fd(setup_chain) = bla;
-	if (bla < 0) {
-		jack_error ("cannot open specified fifo [%s] for reading (%s)",
-			    path, strerror (errno));
-		return -1;
+		if ((client->graph_wait_fd(setup_chain) = open (path, O_WRONLY|O_NONBLOCK)) < 0) {
+			jack_error ("cannot open specified fifo [%s] for reading (%s)",
+					path, strerror (errno));
+			return -1;
+		}
+		DEBUG ("opened new graph_wait_fd %d (%s)", client->graph_wait_fd(setup_chain), path);
+
+		sprintf (path, "%s-%d-%d", client->fifo_prefix, setup_chain, event->x.n+1);
+
+		if ((client->graph_next_fd_array[setup_chain] = open (path, O_WRONLY|O_NONBLOCK)) < 0) {
+			jack_error ("cannot open specified fifo [%s] for writing (%s)",
+					path, strerror (errno));
+			return -1;
+		}
+
+		client->upstream_is_jackd_array[setup_chain] = event->y.n;
+		client->pollmax = 2;
+
+		DEBUG ("opened new graph_next_fd %d (%s) (upstream is jackd? %d)",
+				client->graph_next_fd_array[setup_chain], path, 
+				client->upstream_is_jackd_array[setup_chain]);
 	}
-	DEBUG ("opened new graph_wait_fd %d (%s)", client->graph_wait_fd(setup_chain), path);
-
-	sprintf (path, "%s-%d-%d", client->fifo_prefix, setup_chain, event->x.n+1);
-	
-	if ((client->graph_next_fd_array[setup_chain] = open (path, O_WRONLY|O_NONBLOCK)) < 0) {
-		jack_error ("cannot open specified fifo [%s] for writing (%s)",
-			    path, strerror (errno));
-		return -1;
-	}
-
-	client->upstream_is_jackd_array[setup_chain] = event->y.n;
-	client->pollmax = 2;
-
-	DEBUG ("opened new graph_next_fd %d (%s) (upstream is jackd? %d)",
-	       client->graph_next_fd_array[setup_chain], path, 
-	       client->upstream_is_jackd_array[setup_chain]);
 
 	/* If the client registered its own callback for graph order events,
 	   execute it now.

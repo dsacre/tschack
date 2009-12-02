@@ -69,6 +69,7 @@ int
 jack_client_do_deactivate (jack_engine_t *engine,
 			   jack_client_internal_t *client, int sort_graph)
 {
+	jack_event_t event;
 	/* caller must hold engine->client_lock and must have checked for and/or
 	 *   cleared all connections held by client. 
 	 */
@@ -81,8 +82,14 @@ jack_client_do_deactivate (jack_engine_t *engine,
 	if (!jack_client_is_internal (client) &&
 	    engine->external_client_cnt > 0) {	
 		engine->external_client_cnt--;
+
+		event.type = GraphReordered;
+		event.x.n  = -1;
+		event.y.n = 0;
+		jack_deliver_event (engine, client, &event);
 	}
 	
+
 	if (sort_graph) {
 		jack_sort_graph (engine);
 	}

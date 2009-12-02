@@ -185,6 +185,8 @@ void		jack_engine_reset_rolling_usecs (jack_engine_t *engine);
 int		internal_client_request (void* ptr, jack_request_t *request);
 int		jack_get_fifo_fd (jack_engine_t *engine,
 				  unsigned int which_fifo, unsigned int which_chain);
+int  jack_deliver_event (jack_engine_t *, jack_client_internal_t *,
+				jack_event_t *);
 
 extern jack_timer_type_t clock_source;
 
