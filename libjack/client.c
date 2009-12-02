@@ -556,7 +556,7 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 	if (event->x.n != -1) {
 		sprintf (path, "%s-%d-%d", client->fifo_prefix, setup_chain, event->x.n);
 
-		if ((client->graph_wait_fd(setup_chain) = open (path, O_WRONLY|O_NONBLOCK)) < 0) {
+		if ((client->graph_wait_fd(setup_chain) = open (path, O_RDONLY|O_NONBLOCK)) < 0) {
 			jack_error ("cannot open specified fifo [%s] for reading (%s)",
 					path, strerror (errno));
 			return -1;
