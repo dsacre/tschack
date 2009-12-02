@@ -1970,7 +1970,8 @@ jack_engine_delay (jack_engine_t *engine, float delayed_usecs)
 
 	event.type = XRun;
 
-	jack_deliver_event_to_all (engine, &event);
+	//we can call this currently, because it deadlocks sometimes.
+	//jack_deliver_event_to_all (engine, &event);
 }
 
 static inline void
