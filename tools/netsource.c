@@ -539,6 +539,7 @@ fprintf (stderr, "usage: jack_netsource [options]\n"
 void
 sigterm_handler( int signal )
 {
+	printf( "interrupted\n" );
 	quit = 1;
 }
 
@@ -775,6 +776,8 @@ main (int argc, char *argv[])
         }
     }
 
+    printf( "going down now...\n" ); 
+    // trying to exit
     jack_client_close (client);
     packet_cache_free (global_packcache);
     exit (0);
