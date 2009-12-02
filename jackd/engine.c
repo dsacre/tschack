@@ -106,8 +106,6 @@ static int  jack_send_connection_notification (jack_engine_t *,
 					       jack_client_id_t,
 					       jack_port_id_t,
 					       jack_port_id_t, int);
-static int  jack_deliver_event (jack_engine_t *, jack_client_internal_t *,
-				jack_event_t *);
 static void jack_deliver_event_to_all (jack_engine_t *engine,
 				       jack_event_t *event);
 static void jack_notify_all_port_interested_clients (jack_engine_t *engine,
@@ -2476,7 +2474,7 @@ jack_notify_all_port_interested_clients (jack_engine_t *engine, jack_client_id_t
 	}
 }
 
-static int
+int
 jack_deliver_event (jack_engine_t *engine, jack_client_internal_t *client,
 		    jack_event_t *event)
 {
