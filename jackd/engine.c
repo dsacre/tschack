@@ -2123,8 +2123,8 @@ jack_run_one_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 	// promote chain changes.
 	if( engine->control->current_process_chain != engine->control->next_process_chain ) {
 		// we need to signal the server thread here that we switched chain.
-		pthread_mutex_unlock ( & engine->process_graph_mutex[engine->control->current_process_chain] );
 		pthread_mutex_lock ( & engine->process_graph_mutex[engine->control->next_process_chain] );
+		pthread_mutex_unlock ( & engine->process_graph_mutex[engine->control->current_process_chain] );
 		VERBOSE( engine, "======= chain switch nextchain: %d", engine->control->next_process_chain ); 
 	}
 	engine->control->current_process_chain = engine->control->next_process_chain;
