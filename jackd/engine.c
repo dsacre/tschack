@@ -2152,6 +2152,7 @@ jack_run_one_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 	// promote chain changes.
 	if( engine->control->current_process_chain != engine->control->next_process_chain ) {
 		// we need to signal the server thread here that we switched chain.
+		VERBOSE( engine, "======= chain switch nextchain: %d getting lock...", engine->control->next_process_chain ); 
 		pthread_mutex_lock ( & engine->process_graph_mutex[engine->control->next_process_chain] );
 		pthread_mutex_unlock ( & engine->process_graph_mutex[engine->control->current_process_chain] );
 		VERBOSE( engine, "======= chain switch nextchain: %d", engine->control->next_process_chain ); 
@@ -2161,7 +2162,7 @@ jack_run_one_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 
 	curr_chain = engine->control->current_process_chain;
 
-	VERBOSE( engine, "running cycle for chain %d", curr_chain ); 
+	//VERBOSE( engine, "running cycle for chain %d", curr_chain ); 
 
 #define WORK_SCALE 1.0f
 
@@ -2711,7 +2712,7 @@ jack_rechain_graph (jack_engine_t *engine)
 
 	subgraph_client = 0;
 
-	VERBOSE(engine, "++ jack_rechain_graph():");
+	VERBOSE(engine, "++ jack_rechain_graph(): chain %d", setup_chain );
 
 	event.type = GraphReordered;
 
