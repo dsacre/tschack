@@ -73,6 +73,10 @@ jack_client_do_deactivate (jack_engine_t *engine,
 	/* caller must hold engine->client_lock and must have checked for and/or
 	 *   cleared all connections held by client. 
 	 */
+	if( !client->control->active ) {
+	  VERBOSE(engine,"client %s already deactivated.", client->control->name);
+	  return 0;
+	}
 	VERBOSE(engine,"+++ deactivate %s", client->control->name);
 
 	if (!jack_client_is_internal (client) ) {
