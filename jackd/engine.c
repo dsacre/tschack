@@ -2012,7 +2012,29 @@ jack_engine_freewheel (void *arg)
 
 	while (engine->freewheeling) {
 
-		jack_lock_graph (engine);
+		int curr_chain;
+
+		// promote chain changes.
+		if( engine->control->current_process_chain != engine->control->next_process_chain ) {
+			// we need to signal the server thread here that we switched chain.
+			pthread_mutex_lock ( & engine->process_graph_mutex[engine->control->next_process_chain] );
+			pthread_mutex_unlock ( & engine->process_graph_mutex[engine->control->current_process_chain] );
+			VERBOSE( engine, "======= chain switch nextchain: %d", engine->control->next_process_chain ); 
+		}
+		engine->control->current_process_chain = engine->control->next_process_chain;
+		engine->control->next_process_chain = engine->pending_chain;
+
+		curr_chain = engine->control->current_process_chain;
+
+		jack_lock_problems(engine);
+		if(engine->problems) {
+			jack_unlock_problems(engine);
+			// we should sleep a bit.
+			continue;
+		}
+
+
+		VERBOSE( engine, "freewheel... running cycle for chain %d", curr_chain ); 
 
 		if (jack_engine_process (engine,
 					 engine->control->buffer_size)) {
@@ -2022,8 +2044,7 @@ jack_engine_freewheel (void *arg)
 		}
 
 		jack_engine_post_process (engine);
-
-		jack_unlock_graph (engine);
+		jack_unlock_problems(engine);
 	}
 
 	VERBOSE (engine, "freewheel came to an end, naturally");
