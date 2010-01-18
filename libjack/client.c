@@ -596,7 +596,7 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 	if( pthread_mutex_trylock( &client->process_mutex ) ) {
 		jack_error( "process_thread is alive." );
 	} else {
-		jack_error( "process_thread was waiting... overriding." );
+		jack_error( "process_thread was waiting... overriding" );
 		client->chain_override = setup_chain;
 		pthread_cond_signal( &client->process_wakeup );
 		pthread_mutex_unlock( &client->process_mutex );
@@ -1833,10 +1833,10 @@ jack_process_thread_aux (void *arg)
 	jack_client_t *client = (jack_client_t *) arg;
 	jack_client_control_t *control = client->control;
 
-	DEBUG ("client thread is now running");
+	DEBUG ("client process thread is now running");
 
 	if (control->thread_init_cbset) {
-		DEBUG ("calling client thread init callback");
+		DEBUG ("calling client process thread init callback");
 		client->thread_init (client->thread_init_arg);
 	}
 
@@ -1869,6 +1869,11 @@ static void *
 jack_client_thread (void *arg)
 {
 	jack_client_t *client = (jack_client_t *) arg;
+
+	if (client->control->thread_init_cbset) {
+		DEBUG ("calling client thread init callback");
+		client->thread_init (client->thread_init_arg);
+	}
 
 	if( client->control->process_cbset ) {
 		// lets wait for the process thread
