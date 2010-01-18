@@ -119,7 +119,7 @@ jack_zombify_client (jack_engine_t *engine, jack_client_internal_t *client)
 	jack_client_do_deactivate (engine, client, FALSE);
 }
 
-static void
+void
 jack_remove_client (jack_engine_t *engine, jack_client_internal_t *client)
 {
 	JSList *node;
@@ -913,6 +913,30 @@ jack_client_deactivate (jack_engine_t *engine, jack_client_id_t id)
 
 	return ret;
 }	
+
+jack_client_internal_t *
+jack_get_client_for_fd (jack_engine_t *engine, int fd)
+{
+	/* CALLER MUST HOLD GRAPH LOCK */
+
+	jack_client_internal_t *client = 0;
+	JSList *node;
+
+        for (node = engine->clients; node; node = jack_slist_next (node)) {
+
+                if (jack_client_is_internal((jack_client_internal_t *)
+					    node->data)) {
+                        continue;
+                }
+
+                if (((jack_client_internal_t *) node->data)->request_fd == fd) {
+                        client = (jack_client_internal_t *) node->data;
+                        break;
+                }
+        }
+
+	return client;
+}
 
 int
 jack_mark_client_socket_error (jack_engine_t *engine, int fd)
