@@ -1562,8 +1562,8 @@ jack_server_thread (void *arg)
 			if (engine->pfd[i].revents & ~POLLIN) {
 
 				jack_client_internal_t *client = jack_get_client_for_fd (engine, engine->pfd[i].fd);
-				//jack_mark_client_socket_error (engine, engine->pfd[i].fd);
 				if( client->control->active ) {
+				  jack_mark_client_socket_error (engine, engine->pfd[i].fd);
 				  jack_engine_signal_problems (engine);
 				} else {
 				  jack_unlock_graph (engine);
