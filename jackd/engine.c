@@ -2039,6 +2039,7 @@ jack_engine_freewheel (void *arg)
 		if(engine->problems) {
 			jack_unlock_problems(engine);
 			// we should sleep a bit.
+			usleep(500);
 			continue;
 		}
 
@@ -2200,8 +2201,6 @@ jack_run_one_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 		driver->null_cycle (driver, nframes);
 		return 0;
 	}
-
-	jack_unlock_problems (engine);
 		
 	if (!engine->freewheeling) {
 		DEBUG("waiting for driver read\n");
@@ -2262,6 +2261,7 @@ jack_run_one_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 	ret = 0;
 
   unlock:
+	jack_unlock_problems (engine);
 	DEBUG("cycle finished, status = %d", ret);
 
 	return ret;

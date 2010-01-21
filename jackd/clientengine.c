@@ -224,9 +224,9 @@ jack_check_clients (jack_engine_t* engine, int with_timeout_check)
 	}
 		
 	if (errs) {
-		jack_lock_problems (engine);
+		//jack_lock_problems (engine);
 		engine->problems++;
-		jack_unlock_problems (engine);
+		//jack_unlock_problems (engine);
 		jack_wake_server_thread (engine);
 	}
 }
