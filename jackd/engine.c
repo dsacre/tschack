@@ -1596,13 +1596,17 @@ jack_server_thread (void *arg)
 			VERBOSE (engine, "trying to lock graph to remove %d problems", problemsProblemsPROBLEMS);
 			jack_lock_graph (engine);
 			VERBOSE (engine, "we have problem clients (problems = %d", problemsProblemsPROBLEMS);
-			jack_remove_clients (engine);
-			jack_unlock_graph (engine);
 
 			jack_lock_problems (engine);
+
+			jack_remove_clients (engine);
+
 			engine->problems -= problemsProblemsPROBLEMS;
 			problemsProblemsPROBLEMS = engine->problems;
 			jack_unlock_problems (engine);
+
+			jack_unlock_graph (engine);
+
 
 			VERBOSE (engine, "after removing clients, problems = %d", problemsProblemsPROBLEMS);
 		}
