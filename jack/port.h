@@ -126,6 +126,7 @@ typedef struct _jack_port_shared {
     char		     has_mixdown; /* port has a mixdown function */
     char                     in_use;
     char                     unused; /* legacy locked field */
+    volatile uint32_t	     activation_count;
 
 } POST_PACKED_STRUCTURE jack_port_shared_t;
 
