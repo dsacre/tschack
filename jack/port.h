@@ -25,6 +25,8 @@
 #include <jack/jslist.h>
 #include <jack/shm.h>
 
+#include <sysdeps/atomicity.h>
+
 #define JACK_PORT_NAME_SIZE 256
 #define JACK_PORT_TYPE_SIZE 32
 
@@ -126,7 +128,7 @@ typedef struct _jack_port_shared {
     char		     has_mixdown; /* port has a mixdown function */
     char                     in_use;
     char                     unused; /* legacy locked field */
-    volatile uint32_t	     activation_count;
+    volatile _Atomic_word    activation_count;
 
 } POST_PACKED_STRUCTURE jack_port_shared_t;
 

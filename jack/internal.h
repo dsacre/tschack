@@ -136,6 +136,8 @@ const char* jack_clock_source_name (jack_timer_type_t);
 #define	TRUE	(1)
 #endif
 
+#define JACK_MAX_CLIENTS 128
+
 typedef struct _jack_engine  jack_engine_t;
 typedef struct _jack_request jack_request_t;
 
@@ -201,6 +203,7 @@ typedef struct {
     int32_t		  problems;
     volatile int32_t	  current_process_chain;
     volatile int32_t	  next_process_chain;
+    volatile _Atomic_word client_activation_count[JACK_MAX_CLIENTS];
     jack_port_type_id_t	  n_port_types;
     jack_port_type_info_t port_types[JACK_MAX_PORT_TYPES];
     jack_port_shared_t    ports[0];

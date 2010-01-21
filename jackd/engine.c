@@ -1910,6 +1910,10 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	engine->control->current_process_chain = 0;
 	engine->control->next_process_chain = 0;
 
+	for( int i=0; i<JACK_MAX_CLIENTS; i++ )
+		engine->control->client_activation_count[i] = -1;
+	
+
 	engine->first_wakeup = 1;
 
 	engine->control->buffer_size = 0;

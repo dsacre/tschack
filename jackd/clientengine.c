@@ -490,6 +490,17 @@ jack_client_name_invalid (jack_engine_t *engine, char *name,
 	return FALSE;
 }
 
+static jack_client_id_t
+jack_get_client_id( jack_engine_t *engine )
+{
+	int i;
+	for( i=0; i<JACK_MAX_CLIENTS; i++ )
+		if( engine->control->client_activation_count[i] == -1 )
+			break;
+
+	return i;
+}
+
 /* Set up the engine's client internal and control structures for both
  * internal and external clients. */
 static jack_client_internal_t *
@@ -543,7 +554,7 @@ jack_setup_client_control (jack_engine_t *engine, int fd,
 	client->control->active = 0;
 	client->control->dead = FALSE;
 	client->control->timed_out = 0;
-	client->control->id = engine->next_client_id++;
+	client->control->id = jack_get_client_id( engine );
 	strcpy ((char *) client->control->name, name);
 	client->subgraph_start_fd_array[0] = -1;
 	client->subgraph_start_fd_array[1] = -1;
@@ -962,7 +973,10 @@ jack_mark_client_socket_error (jack_engine_t *engine, int fd)
 void
 jack_client_delete (jack_engine_t *engine, jack_client_internal_t *client)
 {
+	jack_client_id_t id = client->control->id;
+
 	jack_client_registration_notify (engine, (const char*) client->control->name, 0);
+	
 
 	if (jack_client_is_internal (client)) {
 
@@ -980,6 +994,8 @@ jack_client_delete (jack_engine_t *engine, jack_client_internal_t *client)
 		jack_release_shm (&client->control_shm);
 		jack_destroy_shm (&client->control_shm);
 	}
+
+	engine->control->client_activation_count[id] = -1;
 
 	free (client);
 }
