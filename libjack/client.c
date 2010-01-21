@@ -2545,8 +2545,8 @@ jack_set_process_thread(jack_client_t* client, JackThreadCallback callback, void
 	return 0;
 }
 
-int
 /*
+int
 jack_get_process_done_fd (jack_client_t *client)
 {
 	return client->graph_next_fd[engine->control->current_process_chain];

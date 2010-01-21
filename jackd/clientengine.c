@@ -419,17 +419,6 @@ jack_client_internal_by_id (jack_engine_t *engine, jack_client_id_t id)
 	return client;
 }
 
-int
-jack_client_name_reserved( jack_engine_t *engine, const char *name )
-{
-	JSList *node;
-        for (node = engine->reserved_client_names; node; node = jack_slist_next (node)) {
-		jack_reserved_name_t *reservation = (jack_reserved_name_t *) node->data;
-		if( !strcmp( reservation->name, name ) )
-			return 1;
-	}
-	return 0;
-}
 
 /* generate a unique client name
  *
