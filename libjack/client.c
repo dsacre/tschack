@@ -71,9 +71,9 @@ jack_client_close_aux (jack_client_t *client);
 #define EVENT_POLL_INDEX 0
 #define PROCESS_PIPE_INDEX 1
 #define WAIT_POLL_INDEX 2
-#define event_fd pollfd_array[0][EVENT_POLL_INDEX].fd
-#define process_pipe_fd(chain) pollfd_array[chain][PROCESS_PIPE_INDEX].fd
-#define graph_wait_fd(chain) pollfd_array[chain][WAIT_POLL_INDEX].fd
+#define event_fd pollfd[EVENT_POLL_INDEX].fd
+#define process_pipe_fd pollfd[PROCESS_PIPE_INDEX].fd
+#define graph_wait_fd pollfd[WAIT_POLL_INDEX].fd
 
 typedef struct {
     int status;
@@ -334,17 +334,16 @@ jack_client_t *
 jack_client_alloc ()
 {
 	jack_client_t *client;
+	int i;
 
 	if ((client = (jack_client_t *) malloc (sizeof (jack_client_t))) == NULL) {
 		return NULL;
 	}
 
-	if ((client->pollfd_array[0] = (struct pollfd *) malloc (sizeof (struct pollfd) * 3)) == NULL) {
-		free (client);
-		return NULL;
-	}
-	if ((client->pollfd_array[1] = (struct pollfd *) malloc (sizeof (struct pollfd) * 3)) == NULL) {
-		free (client->pollfd_array[0]);
+	// TODO:
+	// remove the double buffer stuff here again.
+
+	if ((client->pollfd = (struct pollfd *) malloc (sizeof (struct pollfd) * 3)) == NULL) {
 		free (client);
 		return NULL;
 	}
@@ -352,15 +351,11 @@ jack_client_alloc ()
 	client->pollmax = 2;
 	client->request_fd = -1;
 	client->event_fd = -1;
-	client->upstream_is_jackd_array[0] = 0;
-	client->upstream_is_jackd_array[1] = 0;
-	client->graph_next_fd_array[0] = -1;
-	client->graph_next_fd_array[1] = -1;
+	for(i=0; i<JACK_MAX_CLIENTS; i++ )
+	  client->graph_next_fds_array[i] = -1;
 
-	client->pollfd_array[0][WAIT_POLL_INDEX].fd = -1;
-	client->pollfd_array[0][PROCESS_PIPE_INDEX].fd = -1;
-	client->pollfd_array[1][WAIT_POLL_INDEX].fd = -1;
-	client->pollfd_array[1][PROCESS_PIPE_INDEX].fd = -1;
+	client->pollfd[WAIT_POLL_INDEX].fd = -1;
+	client->pollfd[PROCESS_PIPE_INDEX].fd = -1;
 
 	client->chain_override = -1;
 
@@ -407,9 +402,8 @@ jack_client_alloc_internal (jack_client_control_t *cc, jack_engine_t* engine)
 static void
 jack_client_free (jack_client_t *client)
 {
-	if (client->pollfd_array) {
-		free (client->pollfd_array[0]);
-		free (client->pollfd_array[1]);
+	if (client->pollfd) {
+		free (client->pollfd);
 	}
 
 	free (client);
@@ -442,6 +436,11 @@ jack_client_invalidate_port_buffers (jack_client_t *client)
 int
 jack_client_handle_port_connection (jack_client_t *client, jack_event_t *event)
 {
+  // TODO:
+  // double buffer this, having a port lock pretty much sucks.
+  // -> remove old setup chain.
+  // -> copy curr_chain connections. and add new connection.
+
 	jack_port_t *control_port;
 	jack_port_t *other = 0;
 	JSList *node;
@@ -533,17 +532,59 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 static int 
 jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 {	
+  // TODO:
+  // on first reorder, open a wait with client_id
+  // then check signal array that we have all
+  // client fds we are feeding.
+  // and make sure they are there.
+  //
+  // do not close unused fds, because we need to wait until
+  // the other cycle is through.
+
 	char path[PATH_MAX+1];
 	int setup_chain = (client->engine->current_process_chain+1)&1;
+	JSList *pnode, *cnode;
 
 	DEBUG ("graph reorder... n=%d\n", event->x.n );
 	jack_error( "reorder for chain %d next chain: %d", setup_chain, client->engine->next_process_chain );
 
-	if (client->graph_wait_fd(setup_chain) >= 0) {
-		DEBUG ("closing graph_wait_fd==%d", client->graph_wait_fd(setup_chain));
-		close (client->graph_wait_fd(setup_chain));
-		client->graph_wait_fd(setup_chain) = -1;
+	if (client->graph_wait_fd == -1) {
+		DEBUG ("create new graph_wait_fd");
+		snprintf (path, sizeof(path), "%s-%d", client->fifo_prefix, client->control->id);
+		if ((client->graph_wait_fd = open (path, O_RDONLY|O_NONBLOCK)) < 0) {
+			jack_error ("cannot open specified fifo [%s] for reading (%s)",
+					path, strerror (errno));
+			return -1;
+		}
+		DEBUG ("opened new graph_wait_fd %d (%s)", client->graph_wait_fd, path);
 	} 
+
+	// now check who we feed, and make sure all fds are open.
+	//
+	// TODO: double buffer connections.
+
+	for (pnode = client->ports; pnode; pnode = jack_slist_next (pnode)) {
+		jack_port_t *port = (jack_port_t *) pnode->data;
+		if (port->shared->flags & JackPortIsInput)
+		  continue;
+
+		pthread_mutex_lock( &port->connection_lock );
+		for (cnode = port->connections; cnode; cnode = jack_slist_next (cnode))
+		{
+			jack_port_t *dst = cnode->data;
+			jack_client_id_t dst_id = dst->shared->client_id;
+			if( client->graph_next_fds_array[dst_id] != -1 )
+				continue;
+
+			snprintf (path, sizeof(path), "%s-%d", client->fifo_prefix, dst_id);
+			if ((client->graph_next_fds_array[dst_id] = open (path, O_WRONLY|O_NONBLOCK)) < 0) {
+				jack_error ("cannot open specified fifo [%s] for writing (%s)",
+						path, strerror (errno));
+				return -1;
+			}
+		}
+		pthread_mutex_unlock( &port->connection_lock );
+	}
 
 	if (client->engine->problems) {
 		char c=0;
@@ -552,38 +593,7 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 		pthread_mutex_unlock( &client->process_mutex );
 	}
 
-	if (client->graph_next_fd_array[setup_chain] >= 0) {
-		DEBUG ("closing graph_next_fd==%d", client->graph_next_fd_array[setup_chain]);
-		close (client->graph_next_fd_array[setup_chain]);
-		client->graph_next_fd_array[setup_chain] = -1;
-	}
-
-	if (event->x.n != -1) {
-		sprintf (path, "%s-%d-%d", client->fifo_prefix, setup_chain, event->x.n);
-
-		if ((client->graph_wait_fd(setup_chain) = open (path, O_RDONLY|O_NONBLOCK)) < 0) {
-			jack_error ("cannot open specified fifo [%s] for reading (%s)",
-					path, strerror (errno));
-			return -1;
-		}
-		DEBUG ("opened new graph_wait_fd %d (%s)", client->graph_wait_fd(setup_chain), path);
-
-		sprintf (path, "%s-%d-%d", client->fifo_prefix, setup_chain, event->x.n+1);
-
-		if ((client->graph_next_fd_array[setup_chain] = open (path, O_WRONLY|O_NONBLOCK)) < 0) {
-			jack_error ("cannot open specified fifo [%s] for writing (%s)",
-					path, strerror (errno));
-			return -1;
-		}
-
-		client->upstream_is_jackd_array[setup_chain] = event->y.n;
-		client->pollmax = 2;
-
-		DEBUG ("opened new graph_next_fd %d (%s) (upstream is jackd? %d)",
-				client->graph_next_fd_array[setup_chain], path, 
-				client->upstream_is_jackd_array[setup_chain]);
-	}
-
+	client->pollmax = 2;
 	/* If the client registered its own callback for graph order events,
 	   execute it now.
 	*/
@@ -1071,16 +1081,12 @@ jack_client_open_aux (const char *client_name,
 	strcpy (client->name, res.name);
 	strcpy (client->fifo_prefix, res.fifo_prefix);
 	client->request_fd = req_fd;
-	client->pollfd_array[0][EVENT_POLL_INDEX].events =
+	client->pollfd[EVENT_POLL_INDEX].events =
 		POLLIN|POLLERR|POLLHUP|POLLNVAL;
 #ifndef JACK_USE_MACH_THREADS
-	client->pollfd_array[0][PROCESS_PIPE_INDEX].events =
+	client->pollfd[PROCESS_PIPE_INDEX].events =
 		POLLIN|POLLERR|POLLHUP|POLLNVAL;
-	client->pollfd_array[0][WAIT_POLL_INDEX].events =
-		POLLIN|POLLERR|POLLHUP|POLLNVAL;
-	client->pollfd_array[1][PROCESS_PIPE_INDEX].events =
-		POLLIN|POLLERR|POLLHUP|POLLNVAL;
-	client->pollfd_array[1][WAIT_POLL_INDEX].events =
+	client->pollfd[WAIT_POLL_INDEX].events =
 		POLLIN|POLLERR|POLLHUP|POLLNVAL;
 #endif
 
@@ -1092,8 +1098,7 @@ jack_client_open_aux (const char *client_name,
 		*status |= (JackFailure);
 		goto fail;
 	}
-	client->process_pipe_fd(0) = client->process_pipe[0];
-	client->process_pipe_fd(1) = client->process_pipe[0];
+	client->process_pipe_fd = client->process_pipe[0];
 
 	/* Don't access shared memory until server connected. */
 	if (jack_initialize_shm (va.server_name)) {
@@ -1396,7 +1401,7 @@ jack_client_process_events (jack_client_t* client)
 
 	DEBUG ("process events");
 
-	if (client->pollfd_array[0][EVENT_POLL_INDEX].revents & POLLIN) {
+	if (client->pollfd[EVENT_POLL_INDEX].revents & POLLIN) {
 		
 		DEBUG ("client receives an event, "
 		       "now reading on event fd");
@@ -1521,7 +1526,7 @@ jack_client_event_loop( jack_client_t* client )
 	DEBUG ("client polling on event fd" );
 	
 	while (1) {
-		if (poll ( &(client->pollfd_array[0][EVENT_POLL_INDEX]), 1, 1000) < 0) {
+		if (poll ( &(client->pollfd[EVENT_POLL_INDEX]), 1, 1000) < 0) {
 			if (errno == EINTR) {
 				continue;
 			}
@@ -1539,7 +1544,7 @@ jack_client_event_loop( jack_client_t* client )
 		}
 	}
 
-	if (control->dead || client->pollfd_array[0][EVENT_POLL_INDEX].revents & ~POLLIN) {
+	if (control->dead || client->pollfd[EVENT_POLL_INDEX].revents & ~POLLIN) {
 		DEBUG ("client appears dead or event pollfd has error status\n");
 		return -1;
 	}
@@ -1550,12 +1555,19 @@ jack_client_event_loop( jack_client_t* client )
 static int
 jack_client_graph_wait( jack_client_t* client )
 {
+
+  // TODO:
+  // remove curr_chain stuff again.
+  // always wait on graphwait_fd
+  // it will never change.
+
 	jack_client_control_t *control = client->control;
 	int curr_chain;
 
 	DEBUG ("client polling on graph_wait_fd" );
 	
 	while (1) {
+#if 0
 		if( client->chain_override<0 ) {
 			curr_chain = client->engine->next_process_chain;
 		} else {
@@ -1564,9 +1576,10 @@ jack_client_graph_wait( jack_client_t* client )
 			jack_error( "chain override %d", curr_chain );
 		}
 		DEBUG( "waiting on chain %d fd is %d", curr_chain, client->pollfd_array[curr_chain][WAIT_POLL_INDEX].fd );
+#endif
 
-		if (client->graph_wait_fd(curr_chain) >= 0 ) { 
-			if (poll (& (client->pollfd_array[curr_chain][PROCESS_PIPE_INDEX]), 2, 1000) < 0) {
+		if (client->graph_wait_fd >= 0 ) { 
+			if (poll (& (client->pollfd[PROCESS_PIPE_INDEX]), 2, 1000) < 0) {
 				if (errno == EINTR) {
 					continue;
 				}
@@ -1574,9 +1587,9 @@ jack_client_graph_wait( jack_client_t* client )
 						strerror (errno));
 				return -1;
 			}
-			if (client->pollfd_array[curr_chain][PROCESS_PIPE_INDEX].revents & POLLIN) {
+			if (client->pollfd[PROCESS_PIPE_INDEX].revents & POLLIN) {
 				char c;
-				read( client->process_pipe_fd(0), &c, 1 );
+				read( client->process_pipe_fd, &c, 1 );
 			}
 		} else {
 			DEBUG( "not polling, fd = -1" );
@@ -1590,17 +1603,17 @@ jack_client_graph_wait( jack_client_t* client )
 		 * process() cycle. 
 		 */
 		
-		if (client->graph_wait_fd(curr_chain) >= 0
-		    && client->pollfd_array[curr_chain][WAIT_POLL_INDEX].revents & POLLIN) {
+		if (client->graph_wait_fd >= 0
+		    && client->pollfd[WAIT_POLL_INDEX].revents & POLLIN) {
 			control->awake_at = jack_get_microseconds();
 			client->last_wakeup_chain = curr_chain;
 		}
 		
 		DEBUG ("pfd[WAIT].revents = 0x%x",
-		       client->pollfd_array[curr_chain][WAIT_POLL_INDEX].revents);
+		       client->pollfd[WAIT_POLL_INDEX].revents);
 		
-		if (client->graph_wait_fd(curr_chain) >= 0 &&
-		    (client->pollfd_array[curr_chain][WAIT_POLL_INDEX].revents & ~POLLIN)) {
+		if (client->graph_wait_fd >= 0 &&
+		    (client->pollfd[WAIT_POLL_INDEX].revents & ~POLLIN)) {
 			
 			/* our upstream "wait" connection
 			   closed, which either means that
@@ -1616,14 +1629,17 @@ jack_client_graph_wait( jack_client_t* client )
 			   check what we are connected to,
 			   and act accordingly.
 			*/
+
+			// TODO: this is still definitely wrong.
 			
+#if 0
 			if (client->upstream_is_jackd_array[curr_chain]) {
 				DEBUG ("WE DIE... just kidding\n");
 				// no we dont die.
 				// this might be rechaining in progress,
 				// we will only terminate when the event_thread
 				// tells us so.
-				client->graph_wait_fd(curr_chain) = -1;
+				client->graph_wait_fd = -1;
 				client->pollmax = 1;
 			} else {
 				DEBUG ("WE PUNT\n");
@@ -1632,13 +1648,14 @@ jack_client_graph_wait( jack_client_t* client )
 				 * GraphReordered event.
 				 */
 				
-				client->graph_wait_fd(curr_chain) = -1;
+				client->graph_wait_fd = -1;
 				client->pollmax = 1;
 			}
+#endif
 		}
 		
-		if (client->graph_wait_fd(curr_chain) >= 0 &&
-		    (client->pollfd_array[curr_chain][WAIT_POLL_INDEX].revents & POLLIN)) {
+		if (client->graph_wait_fd >= 0 &&
+		    (client->pollfd[WAIT_POLL_INDEX].revents & POLLIN)) {
 			DEBUG ("time to run process()\n");
 			break;
 		} else {
@@ -1650,7 +1667,7 @@ jack_client_graph_wait( jack_client_t* client )
 	}
 
 	// XXX: maybe this is contraproductive.
-	if (control->dead || client->pollfd_array[curr_chain][EVENT_POLL_INDEX].revents & ~POLLIN) {
+	if (control->dead || client->pollfd[EVENT_POLL_INDEX].revents & ~POLLIN) {
 		jack_error( "**************************** omg :S" );
 		DEBUG ("client appears dead or event pollfd has error status\n");
 		return -1;
@@ -1665,28 +1682,61 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 	struct pollfd pfds[1];
 	int pret = 0;
 	char c = 0;
+	JSList *pnode, *cnode;
 
-	if (write (client->graph_next_fd_array[curr_chain], &c, sizeof (c))
-	    != sizeof (c)) {
-		DEBUG("cannot write byte to fd %d", client->graph_next_fd_array[curr_chain]);
-		jack_error ("cannot continue execution of the "
-			    "processing graph (%s)",
-			    strerror(errno));
-		return -1;
+	// TODO:
+	// decrement activation counter for all ports we feed.
+	// and wake everybody who needs a wakeup.
+	//
+	// cycles are detected when client activation count is already 0
+
+	// TODO: double buffer connections.
+
+	for (pnode = client->ports; pnode; pnode = jack_slist_next (pnode)) {
+		jack_port_t *port = (jack_port_t *) pnode->data;
+		if (port->shared->flags & JackPortIsInput)
+		  continue;
+
+		pthread_mutex_lock( &port->connection_lock );
+		for (cnode = port->connections; cnode; cnode = jack_slist_next (cnode))
+		{
+			jack_port_t *dst = cnode->data;
+			jack_client_id_t dst_id = dst->shared->client_id;
+
+			if( dst->shared->activation_count == 0 )
+				// seems to be feedback.... skip
+				continue;
+			if( __exchange_and_add( &(dst->shared->activation_count), -1 ) == 1 )
+			{
+				_Atomic_word *cla = &( client->engine->client_activation_count[dst_id] );
+				if( __exchange_and_add( cla, -1 ) == 1 ) {
+					// time to wakeup...
+					if (write (client->graph_next_fds_array[dst_id], &c, sizeof (c))
+							!= sizeof (c)) {
+						DEBUG("cannot write byte to fd %d", client->graph_next_fd_array[curr_chain]);
+						jack_error ("cannot continue execution of the "
+								"processing graph (%s)",
+								strerror(errno));
+						return -1;
+					}
+				}
+			}
+		}
+		pthread_mutex_unlock( &port->connection_lock );
 	}
 	
 	DEBUG ("client sent message to next stage by %" PRIu64 "",
 	       jack_get_microseconds());
 	
-	DEBUG("reading cleanup byte from pipe %d\n", client->graph_wait_fd(client->last_wakeup_chain));
+	DEBUG("reading cleanup byte from pipe %d\n", client->graph_wait_fd);
 
 	/* "upstream client went away?  readability is checked in
 	 * jack_client_graph_wait(), but that's almost a whole cycle
 	 * before we get here.
 	 */
 
-	if (client->graph_wait_fd(client->last_wakeup_chain) >= 0) {
-		pfds[0].fd = client->graph_wait_fd(client->last_wakeup_chain);
+	if (client->graph_wait_fd >= 0) {
+		pfds[0].fd = client->graph_wait_fd;
 		pfds[0].events = POLLIN;
 
 		/* 0 timeout, don't actually wait */
@@ -1694,7 +1744,7 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 	}
 
 	if (pret > 0 && (pfds[0].revents & POLLIN)) {
-		if (read (client->graph_wait_fd(client->last_wakeup_chain), &c, sizeof (c))
+		if (read (client->graph_wait_fd, &c, sizeof (c))
 		    != sizeof (c)) {
 			jack_error ("cannot complete execution of the "
 				"processing graph (%s)", strerror(errno));
@@ -2044,18 +2094,6 @@ jack_start_thread (jack_client_t *client)
 	}
 
 
-
-
-	/* a secondary thread that runs the process callback and uses
-	   ultra-fast Mach primitives for inter-thread signalling.
-
-	   XXX in a properly structured JACK, there would be no
-	   need for this, because we would have client wake up
-	   methods that encapsulated the underlying mechanism
-	   used.
-
-	*/
-
 	if (client->control->process_cbset) {
 	if (jack_client_create_thread(client,
 				      &client->process_thread,
@@ -2189,6 +2227,7 @@ jack_client_close_aux (jack_client_t *client)
 	JSList *node;
 	void *status;
 	int rc;
+	int i;
 
 	rc = jack_deactivate_aux (client);
 	if (rc == ESRCH) {		/* already shut down? */
@@ -2247,20 +2286,14 @@ jack_client_close_aux (jack_client_t *client)
 		}
 
 #ifndef JACK_USE_MACH_THREADS
-		if (client->graph_wait_fd(0) >= 0) {
-			close (client->graph_wait_fd(0));
+		if (client->graph_wait_fd >= 0) {
+			close (client->graph_wait_fd);
 		}
 		
-		if (client->graph_next_fd_array[0] >= 0) {
-			close (client->graph_next_fd_array[0]);
-		}
-
-		if (client->graph_wait_fd(1) >= 0) {
-			close (client->graph_wait_fd(1));
-		}
-		
-		if (client->graph_next_fd_array[1] >= 0) {
-			close (client->graph_next_fd_array[1]);
+		for( i=0; i<JACK_MAX_CLIENTS; i++ ) {
+			if (client->graph_next_fds_array[i] >= 0) {
+				close (client->graph_next_fds_array[i]);
+			}
 		}
 #endif		
 		

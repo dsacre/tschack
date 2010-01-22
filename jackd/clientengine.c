@@ -571,6 +571,7 @@ jack_setup_client_control (jack_engine_t *engine, int fd,
 	client->control->client_register_cbset = FALSE;
 	client->control->thread_cb_cbset = FALSE;
 
+// XXX: hmm... this shouldnt be necessary. but having em uninit sucks.
 #if 0
 	if (type != ClientExternal) {
 	    client->process = NULL;

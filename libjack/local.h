@@ -1,6 +1,8 @@
 #ifndef __jack_libjack_local_h__
 #define __jack_libjack_local_h__
 
+#include "jack/internal.h"
+
 /* Client data structure, in the client address space. */
 struct _jack_client {
 
@@ -9,11 +11,10 @@ struct _jack_client {
     jack_shm_info_t        engine_shm;
     jack_shm_info_t        control_shm;
 
-    struct pollfd*  pollfd_array[2];
+    struct pollfd*  pollfd;
     int             pollmax;
-    int             graph_next_fd_array[2];
+    int             graph_next_fds_array[JACK_MAX_CLIENTS];
     int             request_fd;
-    int             upstream_is_jackd_array[2];
     int	            process_pipe[2];
 
     volatile int    chain_override;

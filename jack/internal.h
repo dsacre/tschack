@@ -203,7 +203,7 @@ typedef struct {
     int32_t		  problems;
     volatile int32_t	  current_process_chain;
     volatile int32_t	  next_process_chain;
-    volatile _Atomic_word client_activation_count[JACK_MAX_CLIENTS];
+    _Atomic_word client_activation_count[JACK_MAX_CLIENTS];
     jack_port_type_id_t	  n_port_types;
     jack_port_type_info_t port_types[JACK_MAX_PORT_TYPES];
     jack_port_shared_t    ports[0];
