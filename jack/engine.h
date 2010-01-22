@@ -131,6 +131,8 @@ struct _jack_engine {
 
     JSList	   *process_graph_list[2];
     pthread_mutex_t process_graph_mutex[2];
+    _Atomic_word   *client_activation_counts_init[2];
+    _Atomic_word   *port_activation_counts_init[2];
 
 
     jack_port_internal_t    *internal_ports;

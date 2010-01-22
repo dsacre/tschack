@@ -1797,6 +1797,16 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 		return NULL;
 	}
 
+	engine->client_activation_counts_init[0] = malloc( sizeof(_Atomic_word) * JACK_MAX_CLIENTS );
+	engine->client_activation_counts_init[1] = malloc( sizeof(_Atomic_word) * JACK_MAX_CLIENTS );
+	for( i=0; i<JACK_MAX_CLIENTS; i++ ) {
+		engine->client_activation_counts_init[0][i] = 0;
+		engine->client_activation_counts_init[1][i] = 0;
+	}
+
+	engine->port_activation_counts_init[0] = malloc( sizeof(_Atomic_word) * engine->port_max );
+	engine->port_activation_counts_init[1] = malloc( sizeof(_Atomic_word) * engine->port_max );
+
 	engine->external_client_cnt = 0;
 
 	srandom (time ((time_t *) 0));
@@ -1913,6 +1923,7 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	for( i=0; i<JACK_MAX_CLIENTS; i++ )
 		engine->control->client_activation_count[i] = -1;
 	
+
 
 	engine->first_wakeup = 1;
 
@@ -2449,6 +2460,14 @@ jack_engine_delete (jack_engine_t *engine)
 
 	VERBOSE (engine, "max usecs: %.3f, engine deleted", engine->max_usecs);
 
+	free (engine->fifo_array[0] );
+	free (engine->fifo_array[1] );
+	free (engine->client_activation_counts_init[0] );
+	free (engine->client_activation_counts_init[1] );
+	free (engine->port_activation_counts_init[0] );
+	free (engine->port_activation_counts_init[1] );
+	free (engine->internal_ports);
+
 	free (engine);
 
 	jack_messagebuffer_exit();
@@ -2708,7 +2727,9 @@ int
 jack_rechain_graph (jack_engine_t *engine)
 {
 	JSList *node, *next;
+	JSList *cnode, *pnode;
 	unsigned long n;
+	int i;
 	int err = 0;
 	jack_client_internal_t *client, *subgraph_client, *next_client;
 	jack_event_t event;
@@ -2729,6 +2750,17 @@ jack_rechain_graph (jack_engine_t *engine)
 	jack_slist_free( engine->process_graph_list[setup_chain] );
 	engine->process_graph_list[setup_chain] = NULL;
 
+	for( i=0; i<JACK_MAX_CLIENTS; i++ )
+		engine->client_activation_counts_init[setup_chain][i] = 0;
+	for( i=0; i<engine->port_max; i++ )
+		engine->port_activation_counts_init[setup_chain][i] = 0;
+
+
+	// TODO:
+	// - determine the set of clients we need to wakeup.
+	// - calculate all activation_count intialisers.
+	// - handle feedback.
+
 	for (n = 0, node = engine->clients, next = NULL; node; node = next) {
 
 		next = jack_slist_next (node);
@@ -2745,116 +2777,43 @@ jack_rechain_graph (jack_engine_t *engine)
 
 			client = (jack_client_internal_t *) node->data;
 
-			engine->process_graph_list[setup_chain] = 
-				jack_slist_append( engine->process_graph_list[setup_chain], client );
-			/* find the next active client. its ok for
-			 * this to be NULL */
-			
-			while (next) {
-				if (((jack_client_internal_t *)
-				     next->data)->control->active && ((jack_client_internal_t *)next->data)->control->process_cbset ) {
-					break;
-				}
-				next = jack_slist_next (next);
-			};
+			for( pnode = client->ports; pnode; pnode=jack_slist_next(pnode) )
+			{
+			  jack_port_t *own_port = pnode->data;
+			  if( own_port->shared->flags & JackPortIsOutput )
+			    continue;
 
-			if (next == NULL) {
-				next_client = NULL;
-			} else {
-				next_client = (jack_client_internal_t *)
-					next->data;
+			  for( cnode=own_port->connections; cnode; cnode=jack_slist_next(cnode) )
+			  {
+			    jack_port_t *other_port = cnode->data;
+			    if( other_port->shared->id == 0 )
+			      //driver ports dont count.
+			      continue;
+
+			    engine->port_activation_counts_init[setup_chain][own_port->shared->id] += 1;
+
+			    // TODO: check for feedback.
+			  }
+			  if( engine->port_activation_counts_init[setup_chain][own_port->shared->id] != 0 )
+			    engine->client_activation_counts_init[setup_chain][client->control->id] += 1;
 			}
 
-			client->execution_order = n;
-			client->next_client = next_client;
+			// ok ... everything counted.. 
+
+			if( engine->client_activation_counts_init[setup_chain][client->control->id] == 0 )
+			{
+			  // this client needs to be triggered by jackd.
+			  engine->process_graph_list[setup_chain] = 
+			    jack_slist_append( engine->process_graph_list[setup_chain], client );
+			}
 			
 			if (jack_client_is_internal (client)) {
 				
-				/* break the chain for the current
-				 * subgraph. the server will wait for
-				 * chain on the nth FIFO, and will
-				 * then execute this internal
-				 * client. */
-				
-				if (subgraph_client) {
-					subgraph_client->subgraph_wait_fd_array[setup_chain] =
-						jack_get_fifo_fd (engine, n, setup_chain);
-					VERBOSE (engine, "client %s: wait_fd="
-						 "%d, execution_order="
-						 "%lu.", 
-						 subgraph_client->
-						 control->name,
-						 subgraph_client->
-						 subgraph_wait_fd_array[setup_chain], n);
-					n++;
-				}
-
-				VERBOSE (engine, "client %s: internal "
-					 "client, execution_order="
-					 "%lu.", 
-					 client->control->name, n);
-
-				/* this does the right thing for
-				 * internal clients too 
-				 */
-
 				jack_deliver_event (engine, client, &event);
 
-				subgraph_client = 0;
-
 			} else {
-				
-				if (subgraph_client == NULL) {
-					
-				        /* start a new subgraph. the
-					 * engine will start the chain
-					 * by writing to the nth
-					 * FIFO. 
-					 */
-					
-					subgraph_client = client;
-					subgraph_client->subgraph_start_fd_array[setup_chain] =
-						jack_get_fifo_fd (engine, n, setup_chain);
-					VERBOSE (engine, "client %s: "
-						 "start_fd=%d, execution"
-						 "_order=%lu.",
-						 subgraph_client->
-						 control->name,
-						 subgraph_client->
-						 subgraph_start_fd_array[setup_chain], n);
-					
-					/* this external client after
-					   this will have jackd as its
-					   upstream connection.
-					*/
-					
-					upstream_is_jackd = 1;
-
-				} 
-				else {
-					VERBOSE (engine, "client %s: in"
-						 " subgraph after %s, "
-						 "execution_order="
-						 "%lu.",
-						 client->control->name,
-						 subgraph_client->
-						 control->name, n);
-					subgraph_client->subgraph_wait_fd_array[setup_chain] = -1;
-					
-					/* this external client after
-					   this will have another
-					   client as its upstream
-					   connection.
-					*/
-					
-					upstream_is_jackd = 0;
-				}
-
-				/* make sure fifo for 'n + 1' exists
-				 * before issuing client reorder
-				 */
-				(void) jack_get_fifo_fd(
-					engine, client->execution_order + 1, setup_chain);
+				//(void) jack_get_fifo_fd(
+				//	engine, client->execution_order + 1, setup_chain);
 				event.x.n = client->execution_order;
 				event.y.n = upstream_is_jackd;
 				jack_deliver_event (engine, client, &event);
@@ -2863,14 +2822,6 @@ jack_rechain_graph (jack_engine_t *engine)
 		}
 	}
 
-	if (subgraph_client) {
-		subgraph_client->subgraph_wait_fd_array[setup_chain] =
-			jack_get_fifo_fd (engine, n, setup_chain);
-		VERBOSE (engine, "client %s: wait_fd=%d, "
-			 "execution_order=%lu (last client).", 
-			 subgraph_client->control->name,
-			 subgraph_client->subgraph_wait_fd_array[setup_chain], n);
-	}
 
 	// chain is setup.
 	// now we need to trigger the swap.
