@@ -969,7 +969,7 @@ jack_engine_process (jack_engine_t *engine, jack_nframes_t nframes)
 		ctl->finished_at = 0;
 
 		for( pnode = client->ports; pnode; pnode=jack_slist_next(pnode) ) {
-		  jack_port_t *port = pnode->data;
+		  jack_port_internal_t *port = pnode->data;
 		  port->shared->activation_count = engine->port_activation_counts_init[curr_chain][port->shared->id];
 		}
 
@@ -990,7 +990,12 @@ jack_engine_process (jack_engine_t *engine, jack_nframes_t nframes)
 	if (engine->process_errors > 0)
 	  return -1;
 
-	return jack_engine_wait_graph( engine );
+	if( engine->server_wakeup_list[curr_chain] ) 
+	  return jack_engine_wait_graph( engine );
+	
+	return 0;
+
+
 }
 
 static void 
@@ -2855,6 +2860,20 @@ jack_deliver_event (jack_engine_t *engine, jack_client_internal_t *client,
 	return 0;
 }
 
+static int
+connection_is_feedback( jack_engine_t *engine, jack_port_internal_t *own_port, jack_port_internal_t *other_port )
+{
+  JSList *node;
+  for( node=engine->clients; node; node=jack_slist_next(node) ) {
+    jack_client_internal_t *client = node->data;
+    if(client->control->id == other_port->shared->client_id)
+      return 1;
+    if(client->control->id == own_port->shared->client_id)
+      return 0;
+  }
+  return 0;
+}
+
 int
 jack_rechain_graph (jack_engine_t *engine)
 {
@@ -2895,34 +2914,38 @@ jack_rechain_graph (jack_engine_t *engine)
 	// - calculate all activation_count intialisers.
 	// - handle feedback.
 
-	for (n = 0, node = engine->clients, next = NULL; node; node = next) {
+	for (n = 0, node = engine->clients; node; node = jack_slist_next(node)) {
 
-		next = jack_slist_next (node);
+		client = (jack_client_internal_t *) node->data;
 
-		if (! ((jack_client_internal_t *) node->data)->control->process_cbset) {
-			continue;
-		}
+		if (client->control->id != 0)
+			if (! client->control->process_cbset) {
+				continue;
+			}
 
 		VERBOSE(engine, "+++ client is now %s active ? %d",
 			((jack_client_internal_t *) node->data)->control->name,
 			((jack_client_internal_t *) node->data)->control->active);
 
-		if (((jack_client_internal_t *) node->data)->control->active) {
-
-			client = (jack_client_internal_t *) node->data;
-
+		if (client->control->active)
+	       	{
 			for( pnode = client->ports; pnode; pnode=jack_slist_next(pnode) )
 			{
-			  jack_port_t *own_port = pnode->data;
+			  jack_port_internal_t *own_port = pnode->data;
+
 			  if( own_port->shared->flags & JackPortIsOutput )
 			    continue;
 
 			  for( cnode=own_port->connections; cnode; cnode=jack_slist_next(cnode) )
 			  {
-			    jack_port_t *other_port = cnode->data;
+			    jack_port_internal_t *other_port = cnode->data;
 			    if( other_port->shared->id == 0 )
 			      //driver ports dont count.
 			      continue;
+
+			    if( connection_is_feedback( engine, own_port, other_port ) )
+			      continue;
+
 
 			    engine->port_activation_counts_init[setup_chain][own_port->shared->id] += 1;
 
