@@ -990,7 +990,7 @@ jack_engine_process (jack_engine_t *engine, jack_nframes_t nframes)
 	if (engine->process_errors > 0)
 	  return -1;
 
-	return 0;
+	return jack_engine_wait_graph( engine );
 }
 
 static void 
@@ -2108,8 +2108,7 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 		  "%s/jack-ack-fifo-%d",
 		  jack_server_dir (engine->server_name, server_dir), getpid ());
 
-	(void) jack_get_fifo_fd (engine, 0, 0);
-	(void) jack_get_fifo_fd (engine, 0, 1);
+	engine->graph_wait_fd = jack_get_fifo_fd (engine, 0);
 
 	jack_client_create_thread (NULL, &engine->server_thread, 0, FALSE,
 				   &jack_server_thread, engine);
@@ -2943,6 +2942,8 @@ jack_rechain_graph (jack_engine_t *engine)
 			}
 			engine->process_graph_list[setup_chain] = 
 			  jack_slist_append( engine->process_graph_list[setup_chain], client );
+
+			client->subgraph_start_fd = jack_get_fifo_fd( engine, client->control->id );
 			
 			if (jack_client_is_internal (client)) {
 				
@@ -3737,13 +3738,13 @@ jack_port_do_disconnect (jack_engine_t *engine,
 }
 
 int 
-jack_get_fifo_fd (jack_engine_t *engine, unsigned int which_fifo, unsigned int which_chain)
+jack_get_fifo_fd (jack_engine_t *engine, unsigned int which_fifo)
 {
 	/* caller must hold client_lock */
 	char path[PATH_MAX+1];
 	struct stat statbuf;
 
-	snprintf (path, sizeof (path), "%s-%d-%d", engine->fifo_prefix, which_chain,
+	snprintf (path, sizeof (path), "%s-%d", engine->fifo_prefix,
 		  which_fifo);
 
 	DEBUG ("%s", path);
@@ -3759,13 +3760,13 @@ jack_get_fifo_fd (jack_engine_t *engine, unsigned int which_fifo, unsigned int w
 			}
 
 		} else {
-			jack_error ("cannot check on FIFO %d in chain %d\n", which_fifo, which_chain);
+			jack_error ("cannot check on FIFO %d \n", which_fifo);
 			return -1;
 		}
 	} else {
 		if (!S_ISFIFO(statbuf.st_mode)) {
-			jack_error ("chain %d FIFO %d (%s) already exists, but is not"
-				    " a FIFO!\n", which_chain, which_fifo, path);
+			jack_error ("FIFO %d (%s) already exists, but is not"
+				    " a FIFO!\n", which_fifo, path);
 			return -1;
 		}
 	}

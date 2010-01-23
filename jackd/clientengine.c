@@ -865,8 +865,7 @@ jack_client_activate (jack_engine_t *engine, jack_client_id_t id)
 			 * this point.
 			 */
 
-			jack_get_fifo_fd (engine, ++engine->external_client_cnt, 0);
-			jack_get_fifo_fd (engine, engine->external_client_cnt, 1);
+			jack_get_fifo_fd (engine, id);
 			jack_sort_graph (engine);
 
 			ret = 0;
