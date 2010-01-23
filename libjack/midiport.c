@@ -25,6 +25,7 @@
 #include <jack/jack.h>
 #include <jack/midiport.h>
 #include <jack/port.h>
+#include "local.h"
 
 
 enum { MIDI_INLINE_MAX = sizeof(jack_shmsize_t) };
@@ -227,6 +228,7 @@ jack_midi_port_mixdown(jack_port_t    *port, jack_nframes_t nframes)
 	jack_nframes_t  i          = 0;
 	int             err        = 0;
 	jack_nframes_t  lost_events = 0;
+	int curr_chain = port->client->engine->current_process_chain;
 
 	/* The next (single) event to mix in to the buffer */
 	jack_midi_port_info_private_t   *earliest_info;
@@ -249,7 +251,7 @@ jack_midi_port_mixdown(jack_port_t    *port, jack_nframes_t nframes)
 	
 	/* Iterate through all connections to see how many events we need to mix,
 	 * and initialise their 'last event read' (last_write_loc) to 0 */
-	for (node = port->connections; node; node = jack_slist_next(node)) {
+	for (node = port->connections_rt[curr_chain]; node; node = jack_slist_next(node)) {
 		input = (jack_port_t *) node->data;
 		in_info =
 			(jack_midi_port_info_private_t *) jack_output_port_buffer(input);
@@ -266,7 +268,7 @@ jack_midi_port_mixdown(jack_port_t    *port, jack_nframes_t nframes)
 
 		/* Find the earliest unread event, to mix next
 		 * (search for an event earlier than earliest_event) */
-		for (node = port->connections; node; node = jack_slist_next(node)) {
+		for (node = port->connections_rt[curr_chain]; node; node = jack_slist_next(node)) {
 			in_info = (jack_midi_port_info_private_t *)
 				jack_output_port_buffer(((jack_port_t *) node->data));
 			in_events = (jack_midi_port_internal_event_t *) (in_info + 1);

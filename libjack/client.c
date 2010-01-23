@@ -461,8 +461,8 @@ jack_client_handle_port_connection (jack_client_t *client, jack_event_t *event)
 			control_port = jack_port_by_id_int (client, event->x.self_id,
 							    &need_free);
 			pthread_mutex_lock (&control_port->connection_lock);
-			control_port->connections =
-				jack_slist_prepend (control_port->connections,
+			control_port->connections_locked =
+				jack_slist_prepend (control_port->connections_locked,
 						    (void *) other);
 			pthread_mutex_unlock (&control_port->connection_lock);
 			break;
@@ -475,15 +475,15 @@ jack_client_handle_port_connection (jack_client_t *client, jack_event_t *event)
 							    &need_free);
 			pthread_mutex_lock (&control_port->connection_lock);
 			
-			for (node = control_port->connections; node;
+			for (node = control_port->connections_locked; node;
 			     node = jack_slist_next (node)) {
 				
 				other = (jack_port_t *) node->data;
 
 				if (other->shared->id == event->y.other_id) {
-					control_port->connections =
+					control_port->connections_locked =
 						jack_slist_remove_link (
-							control_port->connections,
+							control_port->connections_locked,
 							node);
 					jack_slist_free_1 (node);
 					free (other);
@@ -569,7 +569,7 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 		  continue;
 
 		pthread_mutex_lock( &port->connection_lock );
-		for (cnode = port->connections; cnode; cnode = jack_slist_next (cnode))
+		for (cnode = port->connections_locked; cnode; cnode = jack_slist_next (cnode))
 		{
 			jack_port_t *dst = cnode->data;
 			jack_client_id_t dst_id = dst->shared->client_id;
@@ -583,6 +583,8 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 				return -1;
 			}
 		}
+		jack_slist_free( port->connections_rt[setup_chain] );
+		port->connections_rt[setup_chain] = jack_slist_copy( port->connections_locked );
 		pthread_mutex_unlock( &port->connection_lock );
 	}
 
@@ -1684,6 +1686,7 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 	char c = 0;
 	JSList *pnode, *cnode;
 
+
 	// TODO:
 	// decrement activation counter for all ports we feed.
 	// and wake everybody who needs a wakeup.
@@ -1697,11 +1700,15 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 		if (port->shared->flags & JackPortIsInput)
 		  continue;
 
+		DEBUG( "looking at port %s", port->shared->name );
 		pthread_mutex_lock( &port->connection_lock );
-		for (cnode = port->connections; cnode; cnode = jack_slist_next (cnode))
+		for (cnode = port->connections_rt[curr_chain]; cnode; cnode = jack_slist_next (cnode))
 		{
+			
 			jack_port_t *dst = cnode->data;
 			jack_client_id_t dst_id = dst->shared->client_id;
+
+			DEBUG( "-- looking at port %s count = %d", dst->shared->name, dst->shared->activation_count );
 
 			if( dst->shared->activation_count == 0 )
 				// seems to be feedback.... skip
@@ -1713,7 +1720,8 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 					// time to wakeup...
 					if (write (client->graph_next_fds_array[dst_id], &c, sizeof (c))
 							!= sizeof (c)) {
-						DEBUG("cannot write byte to fd %d", client->graph_next_fd_array[curr_chain]);
+						DEBUG("cannot write byte to fd %d for id", 
+						    client->graph_next_fds_array[dst_id], dst_id );
 						jack_error ("cannot continue execution of the "
 								"processing graph (%s)",
 								strerror(errno));
@@ -1752,7 +1760,7 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 		}
 	} else {
 		DEBUG("cleanup byte from pipe %d not available?\n",
-			client->graph_wait_fd(client->last_wakeup_chain));
+			client->graph_wait_fd);
 	}
 	
 	return 0;
@@ -2379,10 +2387,10 @@ jack_port_disconnect (jack_client_t *client, jack_port_t *port)
 
 	pthread_mutex_lock (&port->connection_lock);
 
-	if (port->connections == NULL) {
-		pthread_mutex_unlock (&port->connection_lock);
-		return 0;
-	}
+	//if (port->connections_array == NULL) {
+	//	pthread_mutex_unlock (&port->connection_lock);
+	//	return 0;
+	//}
 
 	pthread_mutex_unlock (&port->connection_lock);
 

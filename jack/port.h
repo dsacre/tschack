@@ -169,7 +169,9 @@ struct _jack_port {
     struct _jack_port        *tied;	 /* locally tied source port */
     jack_port_functions_t    fptr;
     pthread_mutex_t          connection_lock;
-    JSList                   *connections;
+    JSList                   *connections_rt[2];
+    JSList		     *connections_locked;
+    const jack_client_t	     *client;
 };
 
 /*  Inline would be cleaner, but it needs to be fast even in

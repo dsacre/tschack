@@ -187,7 +187,10 @@ jack_port_new (const jack_client_t *client, jack_port_id_t port_id,
 	port->shared = shared;
 	port->type_info = &client->engine->port_types[ptid];
 	pthread_mutex_init (&port->connection_lock, NULL);
-	port->connections = 0;
+	port->connections_rt[0] = 0;
+	port->connections_rt[1] = 0;
+	port->connections_locked = 0;
+	port->client = client;
 	port->tied = NULL;
 
 	if (client->control->id == port->shared->client_id) {
@@ -284,7 +287,8 @@ jack_port_unregister (jack_client_t *client, jack_port_t *port)
 int
 jack_port_connected (const jack_port_t *port)
 {
-	return jack_slist_length (port->connections);
+	
+	return jack_slist_length (port->connections_locked);
 }
 
 int
@@ -302,7 +306,7 @@ jack_port_connected_to (const jack_port_t *port, const char *portname)
 
 	pthread_mutex_lock (&((jack_port_t *) port)->connection_lock);
 
-	for (node = port->connections; node; node = jack_slist_next (node)) {
+	for (node = port->connections_locked; node; node = jack_slist_next (node)) {
 		jack_port_t *other_port = (jack_port_t *) node->data;
 		
 		if (jack_port_name_equals (other_port->shared, portname)) {
@@ -331,17 +335,17 @@ jack_port_get_connections (const jack_port_t *port)
 
 	pthread_mutex_lock (&((jack_port_t *) port)->connection_lock);
 
-	if (port->connections != NULL) {
+	if (port->connections_locked != NULL) {
 
 		ret = (const char **)
 			malloc (sizeof (char *)
-				* (jack_slist_length (port->connections) + 1));
+				* (jack_slist_length (port->connections_locked) + 1));
 		if (ret == NULL) {
 			pthread_mutex_unlock (&((jack_port_t *)port)->connection_lock);
 			return NULL;
 		}
 
-		for (n = 0, node = port->connections; node;
+		for (n = 0, node = port->connections_locked; node;
 		     node = jack_slist_next (node), ++n) {
 			jack_port_t* other =(jack_port_t *) node->data;
 			ret[n] = other->shared->name;
@@ -538,7 +542,7 @@ jack_port_get_buffer (jack_port_t *port, jack_nframes_t nframes)
 	   made/broken during this phase (enforced by the jack
 	   server), there is no need to take the connection lock here
 	*/
-	if ((node = port->connections) == NULL) {
+	if ((node = port->connections_rt[port->client->engine->current_process_chain]) == NULL) {
 		
 		/* no connections; return a zero-filled buffer */
 		return (void *) (*(port->client_segment_base) + port->type_info->zero_buffer_offset);
@@ -618,7 +622,7 @@ jack_port_request_monitor (jack_port_t *port, int onoff)
 		 */
 
 		pthread_mutex_lock (&port->connection_lock);
-		for (node = port->connections; node;
+		for (node = port->connections_locked; node;
 		     node = jack_slist_next (node)) {
 			
 			/* drop the lock because if there is a feedback loop,
@@ -814,7 +818,7 @@ jack_audio_port_mixdown (jack_port_t *port, jack_nframes_t nframes)
 	   during this time.
 	*/
 
-	node = port->connections;
+	node = port->connections_rt[port->client->engine->current_process_chain];
 	input = (jack_port_t *) node->data;
 	buffer = port->mix_buffer;
 

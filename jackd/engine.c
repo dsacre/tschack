@@ -853,7 +853,7 @@ jack_engine_wait_graph (jack_engine_t *engine)
 	jack_time_t poll_timeout_usecs;
 	jack_time_t now, then;
 	int pollret;
-	//int curr_chain = engine->control->current_process_chain;
+	int curr_chain = engine->control->current_process_chain;
 
 	then = jack_get_microseconds ();
 
@@ -2670,6 +2670,19 @@ jack_notify_all_port_interested_clients (jack_engine_t *engine, jack_client_id_t
 	}
 }
 
+static void
+jack_intclient_do_reorder( jack_client_t *client )
+{
+  JSList *pnode;
+  int setup_chain = (client->engine->current_process_chain+1)&1;
+  for( pnode=client->ports; pnode; pnode=jack_slist_next(pnode) ) {
+    jack_port_t *port = pnode->data;
+
+    jack_slist_free( port->connections_rt[setup_chain] );
+    port->connections_rt[setup_chain] = jack_slist_copy( port->connections_locked );
+
+  }
+}
 int
 jack_deliver_event (jack_engine_t *engine, jack_client_internal_t *client,
 		    jack_event_t *event)
@@ -2722,6 +2735,7 @@ jack_deliver_event (jack_engine_t *engine, jack_client_internal_t *client,
 			break;
 
 		case GraphReordered:
+			jack_intclient_do_reorder( client->private_client );
 			if (client->control->graph_order_cbset) {
 				client->private_client->graph_order
 					(client->private_client->graph_order_arg);
@@ -2864,6 +2878,10 @@ static int
 connection_is_feedback( jack_engine_t *engine, jack_port_internal_t *own_port, jack_port_internal_t *other_port )
 {
   JSList *node;
+
+  if( own_port->shared->client_id == other_port->shared->client_id )
+    return 1;
+
   for( node=engine->clients; node; node=jack_slist_next(node) ) {
     jack_client_internal_t *client = node->data;
     if(client->control->id == other_port->shared->client_id)
@@ -2871,18 +2889,19 @@ connection_is_feedback( jack_engine_t *engine, jack_port_internal_t *own_port, j
     if(client->control->id == own_port->shared->client_id)
       return 0;
   }
+
   return 0;
 }
 
 int
 jack_rechain_graph (jack_engine_t *engine)
 {
-	JSList *node, *next;
+	JSList *node;
 	JSList *cnode, *pnode;
 	unsigned long n;
 	int i;
 	int err = 0;
-	jack_client_internal_t *client, *subgraph_client, *next_client;
+	jack_client_internal_t *client, *subgraph_client;
 	jack_event_t event;
 	int upstream_is_jackd;
 	int setup_chain = (engine->control->current_process_chain+1)&1;
@@ -2938,22 +2957,28 @@ jack_rechain_graph (jack_engine_t *engine)
 
 			  for( cnode=own_port->connections; cnode; cnode=jack_slist_next(cnode) )
 			  {
-			    jack_port_internal_t *other_port = cnode->data;
-			    if( other_port->shared->id == 0 )
+			    jack_connection_internal_t *conn = cnode->data;
+			    jack_port_internal_t *other_port = conn->source;
+
+			    VERBOSE( engine, "checking port %s...", other_port->shared->name );
+			    if( other_port->shared->client_id == 0 )
 			      //driver ports dont count.
 			      continue;
 
-			    if( connection_is_feedback( engine, own_port, other_port ) )
+			    if( conn->dir != 1 )
 			      continue;
 
+			    VERBOSE( engine, "counts" );
 
 			    engine->port_activation_counts_init[setup_chain][own_port->shared->id] += 1;
-
-			    // TODO: check for feedback.
 			  }
+			  VERBOSE( engine, "port %s activation_count=%d", own_port->shared->name, 
+			      engine->port_activation_counts_init[setup_chain][own_port->shared->id] );
+
 			  if( engine->port_activation_counts_init[setup_chain][own_port->shared->id] != 0 )
 			    engine->client_activation_counts_init[setup_chain][client->control->id] += 1;
 			}
+
 
 			// ok ... everything counted.. 
 
