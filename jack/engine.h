@@ -102,13 +102,14 @@ struct _jack_engine {
 
     int		    fds[2];
     int		    cleanup_fifo[2];
+    int		    graph_wait_fd;
     jack_client_id_t next_client_id;
     size_t	    pfd_size;
     size_t	    pfd_max;
     struct pollfd  *pfd;
     char	    fifo_prefix[PATH_MAX+1];
-    int		   *fifo_array[2];
-    unsigned long   fifo_size_a[2];
+    int		   *fifo;
+    unsigned long   fifo_size;
     unsigned long   external_client_cnt;
     int		    rtpriority;
     char	    freewheeling;
@@ -129,16 +130,24 @@ struct _jack_engine {
     /* these lists are protected by `client_lock' */
     JSList	   *clients;
 
+    jack_port_internal_t    *internal_ports;
+    jack_client_internal_t  *timebase_client;
+    jack_port_buffer_info_t *silent_buffer;
+    jack_client_internal_t  *current_client;
+
+    /* these lists are protected by the chain locks
+     * the RT thread owns one of them, the other is free
+     * for manipulation... after manipulation a chainswap
+     * needs to be triggered to put the changes in effect.
+     */
+
     JSList	   *process_graph_list[2];
+    JSList	   *server_wakeup_list[2];
     pthread_mutex_t process_graph_mutex[2];
     _Atomic_word   *client_activation_counts_init[2];
     _Atomic_word   *port_activation_counts_init[2];
 
 
-    jack_port_internal_t    *internal_ports;
-    jack_client_internal_t  *timebase_client;
-    jack_port_buffer_info_t *silent_buffer;
-    jack_client_internal_t  *current_client;
 
 #define JACK_ENGINE_ROLLING_COUNT 32
 #define JACK_ENGINE_ROLLING_INTERVAL 1024

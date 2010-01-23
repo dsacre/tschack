@@ -556,10 +556,7 @@ jack_setup_client_control (jack_engine_t *engine, int fd,
 	client->control->timed_out = 0;
 	client->control->id = jack_get_client_id( engine );
 	strcpy ((char *) client->control->name, name);
-	client->subgraph_start_fd_array[0] = -1;
-	client->subgraph_start_fd_array[1] = -1;
-	client->subgraph_wait_fd_array[0] = -1;
-	client->subgraph_wait_fd_array[1] = -1;
+	client->subgraph_start_fd = -1;
 
 	client->control->process_cbset = FALSE;
 	client->control->bufsize_cbset = FALSE;

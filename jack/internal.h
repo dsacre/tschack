@@ -439,8 +439,7 @@ typedef struct _jack_client_internal {
 
     int        request_fd;
     int        event_fd;
-    int        subgraph_start_fd_array[2];
-    int        subgraph_wait_fd_array[2];
+    int        subgraph_start_fd;
     JSList    *ports;    /* protected by engine->client_lock */
     JSList    *truefeeds;    /* protected by engine->client_lock */
     JSList    *sortfeeds;    /* protected by engine->client_lock */

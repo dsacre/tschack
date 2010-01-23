@@ -86,7 +86,7 @@ static int                    jack_port_assign_buffer (jack_engine_t *,
 static jack_port_internal_t *jack_get_port_by_name (jack_engine_t *,
 						    const char *name);
 static int  jack_rechain_graph (jack_engine_t *engine);
-static void jack_clear_fifos (jack_engine_t *engine, unsigned int which_chain);
+static void jack_clear_fifos (jack_engine_t *engine);
 static int  jack_port_do_connect (jack_engine_t *engine,
 				  const char *source_port,
 				  const char *destination_port);
@@ -661,6 +661,8 @@ jack_process_external(jack_engine_t *engine, JSList *node)
         return jack_slist_next (node);
 }
 #else /* !JACK_USE_MACH_THREADS */
+
+#if 0
 static JSList * 
 jack_process_external(jack_engine_t *engine, JSList *node)
 {
@@ -811,47 +813,184 @@ jack_process_external(jack_engine_t *engine, JSList *node)
 	
 	return node;
 }
+#endif
 
 #endif /* JACK_USE_MACH_THREADS */
 
+static int 
+jack_engine_trigger_client (jack_engine_t *engine, jack_client_internal_t *client )
+{
+	char c = 0;
+	//struct pollfd pfd[1];
+	jack_client_control_t *ctl;
+	//int curr_chain = engine->control->current_process_chain;
+
+	ctl = client->control;
+
+	/* a race exists if we do this after the write(2) */
+	ctl->state = Triggered; 
+
+	ctl->signalled_at = jack_get_microseconds();
+
+	if (write (client->subgraph_start_fd, &c, sizeof (c)) != sizeof (c)) {
+		jack_error ("cannot initiate graph processing (%s)",
+			    strerror (errno));
+		engine->process_errors++;
+		jack_engine_signal_problems (engine);
+		return -1; /* will stop the loop */
+	} 
+
+	return 0;
+}
+
+static int
+jack_engine_wait_graph (jack_engine_t *engine)
+{
+	int status = 0;
+	char c = 0;
+	struct pollfd pfd[1];
+	int poll_timeout;
+	jack_time_t poll_timeout_usecs;
+	jack_time_t now, then;
+	int pollret;
+	//int curr_chain = engine->control->current_process_chain;
+
+	then = jack_get_microseconds ();
+
+	if (engine->freewheeling) {
+		poll_timeout_usecs = 10000000; /* 10 seconds */
+	} else {
+		poll_timeout_usecs = (engine->client_timeout_msecs > 0 ?
+				engine->client_timeout_msecs * 1000 :
+				engine->driver->period_usecs);
+	}
+
+     again:
+	poll_timeout = 1 + poll_timeout_usecs / 1000;
+	pfd[0].fd = engine->graph_wait_fd;
+	pfd[0].events = POLLERR|POLLIN|POLLHUP|POLLNVAL;
+
+	DEBUG ("waiting on fd==%d chain==%d for process() subgraph to finish (timeout = %d, period_usecs = %d)",
+	       engine->graph_wait_fd, curr_chain, poll_timeout, engine->driver->period_usecs);
+
+	if ((pollret = poll (pfd, 1, poll_timeout)) < 0) {
+		jack_error ("poll on subgraph processing failed (%s)",
+			    strerror (errno));
+		status = -1; 
+	}
+
+	DEBUG ("\n\n\n\n\n back from subgraph poll, revents = 0x%x\n\n\n", pfd[0].revents);
+
+	if (pfd[0].revents & ~POLLIN) {
+		jack_error ("subgraph starting at lost client");
+		status = -2; 
+	}
+
+	if (pfd[0].revents & POLLIN) {
+
+		status = 0;
+
+	} else if (status == 0) {
+
+		/* no events, no errors, we woke up because poll()
+		   decided that time was up ...
+		*/
+
+#ifdef __linux		
+		if (linux_poll_bug_encountered (engine, then, &poll_timeout_usecs)) {
+			goto again;
+		}
+
+		if (poll_timeout_usecs < 200) {
+			VERBOSE (engine, "FALSE WAKEUP skipped, remaining = %lld usec", poll_timeout_usecs);
+		} else {
+#endif
+			
+		jack_error ("graph timed out "
+			    "(graph_wait_fd=%d, status = %d, pollret = %d revents = 0x%x)", 
+			    engine->graph_wait_fd, status, 
+			    pollret, pfd[0].revents);
+		status = 1;
+#ifdef __linux
+		}
+#endif
+	}
+
+	now = jack_get_microseconds ();
+
+	if (status != 0) {
+		VERBOSE (engine, "at %" PRIu64
+			 " waiting on %d for %" PRIu64
+			 " usecs, status = %d",
+			 now,
+			 engine->graph_wait_fd,
+			 now - then,
+			 status );
+
+		jack_check_clients (engine, 1);
+
+		engine->process_errors++;
+		return -1;		/* will stop the loop */
+
+	} else {
+
+		DEBUG ("reading byte from subgraph_wait_fd==%d chain=%d",
+		       engine->graph_wait_fd, curr_chain);
+
+		if (read (engine->graph_wait_fd, &c, sizeof(c))
+		    != sizeof (c)) {
+			jack_error ("pp: cannot clean up byte from graph wait "
+				    "fd (%s)", strerror (errno));
+			return -1;	/* will stop the loop */
+		}
+	}
+
+	return 0;
+}
 static int
 jack_engine_process (jack_engine_t *engine, jack_nframes_t nframes)
 {
 	/* precondition: caller has current chain lock */
 	jack_client_internal_t *client;
-	JSList *node;
+	JSList *node, *pnode;
 	int curr_chain = engine->control->current_process_chain; 
 
 	engine->process_errors = 0;
 	engine->watchdog_check = 1;
 
 	for (node = engine->process_graph_list[curr_chain]; node; node = jack_slist_next (node)) {
-		jack_client_control_t *ctl =
-			((jack_client_internal_t *) node->data)->control;
+		client = (jack_client_internal_t *) node->data;
+		jack_client_control_t *ctl = client->control;
+
 		ctl->state = NotTriggered;
 		ctl->nframes = nframes;
 		ctl->timed_out = 0;
 		ctl->awake_at = 0;
 		ctl->finished_at = 0;
+
+		for( pnode = client->ports; pnode; pnode=jack_slist_next(pnode) ) {
+		  jack_port_t *port = pnode->data;
+		  port->shared->activation_count = engine->port_activation_counts_init[curr_chain][port->shared->id];
+		}
+
+		engine->control->client_activation_count[ctl->id] = 
+		  engine->client_activation_counts_init[curr_chain][ctl->id];
 	}
 
-	for (node = engine->process_graph_list[curr_chain]; engine->process_errors == 0 && node; ) {
+	for (node = engine->server_wakeup_list[curr_chain]; node; node=jack_slist_next(node) ) {
 
 		client = (jack_client_internal_t *) node->data;
 		
-		DEBUG ("considering client %s for processing",
+		DEBUG ("triggering client %s for processing",
 		       client->control->name);
 
-		if ( !client->control->process_cbset || client->control->dead) {
-			node = jack_slist_next (node);
-		} else if (jack_client_is_internal (client)) {
-			node = jack_process_internal (engine, node, nframes);
-		} else {
-			node = jack_process_external (engine, node);
-		}
+		jack_engine_trigger_client( engine, client );
 	}
 
-	return engine->process_errors > 0;
+	if (engine->process_errors > 0)
+	  return -1;
+
+	return 0;
 }
 
 static void 
@@ -1771,15 +1910,10 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	engine->pfd_max = 0;
 	engine->pfd = 0;
 
-	engine->fifo_size_a[0] = 16;
-	engine->fifo_size_a[1] = 16;
-	engine->fifo_array[0] = (int *) malloc (sizeof (int) * engine->fifo_size_a[0]);
-	for (i = 0; i < engine->fifo_size_a[0]; i++) {
-		engine->fifo_array[0][i] = -1;
-	}
-	engine->fifo_array[1] = (int *) malloc (sizeof (int) * engine->fifo_size_a[1]);
-	for (i = 0; i < engine->fifo_size_a[1]; i++) {
-		engine->fifo_array[1][i] = -1;
+	engine->fifo_size = 16;
+	engine->fifo = (int *) malloc (sizeof (int) * engine->fifo_size);
+	for (i = 0; i < engine->fifo_size; i++) {
+		engine->fifo[i] = -1;
 	}
 
 	if (pipe (engine->cleanup_fifo)) {
@@ -2460,8 +2594,7 @@ jack_engine_delete (jack_engine_t *engine)
 
 	VERBOSE (engine, "max usecs: %.3f, engine deleted", engine->max_usecs);
 
-	free (engine->fifo_array[0] );
-	free (engine->fifo_array[1] );
+	free (engine->fifo );
 	free (engine->client_activation_counts_init[0] );
 	free (engine->client_activation_counts_init[1] );
 	free (engine->port_activation_counts_init[0] );
@@ -2749,6 +2882,8 @@ jack_rechain_graph (jack_engine_t *engine)
 
 	jack_slist_free( engine->process_graph_list[setup_chain] );
 	engine->process_graph_list[setup_chain] = NULL;
+	jack_slist_free( engine->server_wakeup_list[setup_chain] );
+	engine->server_wakeup_list[setup_chain] = NULL;
 
 	for( i=0; i<JACK_MAX_CLIENTS; i++ )
 		engine->client_activation_counts_init[setup_chain][i] = 0;
@@ -2803,9 +2938,11 @@ jack_rechain_graph (jack_engine_t *engine)
 			if( engine->client_activation_counts_init[setup_chain][client->control->id] == 0 )
 			{
 			  // this client needs to be triggered by jackd.
-			  engine->process_graph_list[setup_chain] = 
-			    jack_slist_append( engine->process_graph_list[setup_chain], client );
+			  engine->server_wakeup_list[setup_chain] = 
+			    jack_slist_append( engine->server_wakeup_list[setup_chain], client );
 			}
+			engine->process_graph_list[setup_chain] = 
+			  jack_slist_append( engine->process_graph_list[setup_chain], client );
 			
 			if (jack_client_is_internal (client)) {
 				
@@ -3199,13 +3336,12 @@ void jack_dump_configuration(jack_engine_t *engine, int take_lock)
 		ctl = client->control;
 
 		jack_info ("client #%d: %s (type: %d, process? %s,"
-			 " start=%d wait=%d",
+			 " start=%d",
 			 ++n,
 			 ctl->name,
 			 ctl->type,
 			 ctl->process_cbset ? "yes" : "no",
-			 client->subgraph_start_fd_array[curr_chain],
-			 client->subgraph_wait_fd_array[curr_chain]);
+			 client->subgraph_start_fd );
 
 		for(m = 0, portnode = client->ports; portnode;
 		    portnode = jack_slist_next (portnode)) {
@@ -3634,34 +3770,34 @@ jack_get_fifo_fd (jack_engine_t *engine, unsigned int which_fifo, unsigned int w
 		}
 	}
 
-	if (which_fifo >= engine->fifo_size_a[which_chain]) {
+	if (which_fifo >= engine->fifo_size) {
 		unsigned int i;
 
-		engine->fifo_array[which_chain] = (int *)
-			realloc (engine->fifo_array[which_chain],
-				 sizeof (int) * (engine->fifo_size_a[which_chain] + 16));
-		for (i = engine->fifo_size_a[which_chain]; i < engine->fifo_size_a[which_chain] + 16; i++) {
-			engine->fifo_array[which_chain][i] = -1;
+		engine->fifo = (int *)
+			realloc (engine->fifo,
+				 sizeof (int) * (engine->fifo_size + 16));
+		for (i = engine->fifo_size; i < engine->fifo_size + 16; i++) {
+			engine->fifo[i] = -1;
 		}
-		engine->fifo_size_a[which_chain] += 16;
+		engine->fifo_size += 16;
 	}
 
-	if (engine->fifo_array[which_chain][which_fifo] < 0) {
-		if ((engine->fifo_array[which_chain][which_fifo] =
+	if (engine->fifo[which_fifo] < 0) {
+		if ((engine->fifo[which_fifo] =
 		     open (path, O_RDWR|O_CREAT|O_NONBLOCK, 0666)) < 0) {
 			jack_error ("cannot open fifo [%s] (%s)", path,
 				    strerror (errno));
 			return -1;
 		}
 		DEBUG ("opened engine->fifo[%d] == %d (%s)",
-		       which_fifo, engine->fifo_array[which_chain][which_fifo], path);
+		       which_fifo, engine->fifo[which_fifo], path);
 	}
 
-	return engine->fifo_array[which_chain][which_fifo];
+	return engine->fifo[which_fifo];
 }
 
 static void
-jack_clear_fifos (jack_engine_t *engine, unsigned int which_chain)
+jack_clear_fifos (jack_engine_t *engine)
 {
 	/* caller must hold client_lock */
 
@@ -3672,9 +3808,9 @@ jack_clear_fifos (jack_engine_t *engine, unsigned int which_chain)
 	   them by aborted clients, etc. there is only ever going to
 	   be 0, 1 or 2 bytes in them, but we'll allow for up to 16.
 	*/
-	for (i = 0; i < engine->fifo_size_a[which_chain]; i++) {
-		if (engine->fifo_array[which_chain][i] >= 0) {
-			int nread = read (engine->fifo_array[which_chain][i], buf, sizeof (buf));
+	for (i = 0; i < engine->fifo_size; i++) {
+		if (engine->fifo[i] >= 0) {
+			int nread = read (engine->fifo[i], buf, sizeof (buf));
 
 			if (nread < 0 && errno != EAGAIN) {
 				jack_error ("clear fifo[%d] error: %s",
