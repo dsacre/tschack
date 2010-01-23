@@ -2870,7 +2870,7 @@ jack_rechain_graph (jack_engine_t *engine)
 	int setup_chain = (engine->control->current_process_chain+1)&1;
 	int curr_chain = engine->control->current_process_chain;
 
-	jack_clear_fifos (engine, setup_chain);
+	//jack_clear_fifos (engine, setup_chain);
 
 	subgraph_client = 0;
 
