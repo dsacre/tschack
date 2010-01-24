@@ -2138,8 +2138,10 @@ jack_engine_delay (jack_engine_t *engine, float delayed_usecs)
 
 	event.type = XRun;
 
-	//we can call this currently, because it deadlocks sometimes.
-	//jack_deliver_event_to_all (engine, &event);
+	//we cant call this currently, because it deadlocks sometimes.
+	//i am dropping the graphlock while waiting for a rechain.
+	//should work now.
+	jack_deliver_event_to_all (engine, &event);
 }
 
 static inline void
@@ -3019,9 +3021,14 @@ jack_rechain_graph (jack_engine_t *engine)
 
 	engine->pending_chain = setup_chain;
 	VERBOSE (engine, "chain swap triggered...");
+
+	// unlock the graph lock... to prevent deadlock for xrun reporting.
+	// thats a bit shitty...
+	jack_unlock_graph(engine);
 	pthread_mutex_lock( & engine->process_graph_mutex[curr_chain] );
 	pthread_mutex_unlock( & engine->process_graph_mutex[curr_chain] );
 
+	jack_lock_graph(engine);
 
 
 	VERBOSE (engine, "-- jack_rechain_graph()");
