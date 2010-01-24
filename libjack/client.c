@@ -549,7 +549,7 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 	jack_error( "reorder for chain %d next chain: %d", setup_chain, client->engine->next_process_chain );
 
 	if (client->graph_wait_fd == -1) {
-		DEBUG ("create new graph_wait_fd");
+		jack_error ("create new graph_wait_fd");
 		snprintf (path, sizeof(path), "%s-%d", client->fifo_prefix, client->control->id);
 		if ((client->graph_wait_fd = open (path, O_RDONLY|O_NONBLOCK)) < 0) {
 			jack_error ("cannot open specified fifo [%s] for reading (%s)",
@@ -1805,17 +1805,19 @@ jack_thread_wait (jack_client_t* client, int status)
 	*/
 	
 	if (jack_wake_next_client (client, client->engine->current_process_chain)) {
-		DEBUG("client cannot wake next, or is dead\n");
+		jack_error("client cannot wake next, or is dead\n");
 		return 0;
 	}
 
 	if (status || client->control->dead || !client->engine->engine_ok) {
+		jack_error("status.... exit\n");
 		return 0;
 	}
 	
    /* SECTION TWO: WAIT FOR NEXT DATA PROCESSING TIME */
 
 	if (jack_client_graph_wait (client)) {
+		jack_error("graph_wait fail...\n");
 		return 0;
 	}
 
