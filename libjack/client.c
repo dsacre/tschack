@@ -486,7 +486,7 @@ jack_client_handle_port_connection (jack_client_t *client, jack_event_t *event)
 							control_port->connections_locked,
 							node);
 					jack_slist_free_1 (node);
-					free (other);
+					//free (other);
 					break;
 				}
 			}
