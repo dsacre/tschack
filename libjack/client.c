@@ -565,10 +565,15 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 
 	for (pnode = client->ports; pnode; pnode = jack_slist_next (pnode)) {
 		jack_port_t *port = (jack_port_t *) pnode->data;
-		if (port->shared->flags & JackPortIsInput)
-		  continue;
 
 		pthread_mutex_lock( &port->connection_lock );
+		jack_slist_free( port->connections_rt[setup_chain] );
+		port->connections_rt[setup_chain] = jack_slist_copy( port->connections_locked );
+		if (port->shared->flags & JackPortIsInput) {
+		  pthread_mutex_unlock( &port->connection_lock );
+		  continue;
+		}
+
 		for (cnode = port->connections_locked; cnode; cnode = jack_slist_next (cnode))
 		{
 			jack_port_t *dst = cnode->data;
@@ -583,8 +588,6 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 				return -1;
 			}
 		}
-		jack_slist_free( port->connections_rt[setup_chain] );
-		port->connections_rt[setup_chain] = jack_slist_copy( port->connections_locked );
 		pthread_mutex_unlock( &port->connection_lock );
 	}
 
