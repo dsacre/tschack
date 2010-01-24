@@ -1713,6 +1713,9 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 
 			DEBUG( "-- looking at port %s count = %d", dst->shared->name, dst->shared->activation_count );
 
+			if( dst_id == client->control->id )
+				continue;
+
 			if( dst->shared->activation_count == 0 )
 				// seems to be feedback.... skip
 				continue;
