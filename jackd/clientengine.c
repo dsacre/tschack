@@ -141,6 +141,7 @@ jack_remove_client (jack_engine_t *engine, jack_client_internal_t *client)
 		close (client->event_fd);
 		close (client->request_fd);
 		close (client->subgraph_start_fd);
+		engine->fifo[client->control->id] = -1;
 	}
 
 	for (node = engine->clients; node; node = jack_slist_next (node)) {
