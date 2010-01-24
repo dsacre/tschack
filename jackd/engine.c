@@ -836,7 +836,8 @@ jack_engine_trigger_client (jack_engine_t *engine, jack_client_internal_t *clien
 		jack_error ("cannot initiate graph processing (%s)",
 			    strerror (errno));
 		engine->process_errors++;
-		jack_engine_signal_problems (engine);
+		// we already hold the problem lock.
+		engine->problems++;
 		return -1; /* will stop the loop */
 	} 
 
@@ -2208,7 +2209,7 @@ jack_engine_freewheel (void *arg)
 		if (jack_engine_process (engine,
 					 engine->control->buffer_size)) {
 			jack_error ("process cycle within freewheel failed");
-			jack_unlock_graph (engine);
+			jack_unlock_problems (engine);
 			break;
 		}
 
