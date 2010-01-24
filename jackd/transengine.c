@@ -82,8 +82,9 @@ jack_sync_poll_stop (jack_engine_t *engine)
 {
 	JSList *node;
 	long poll_count = 0;		/* count sync_poll clients */
+	int curr_chain = engine->control->current_process_chain;
 
-	for (node = engine->clients; node; node = jack_slist_next (node)) {
+	for (node = engine->process_graph_list[curr_chain]; node; node = jack_slist_next (node)) {
 		jack_client_internal_t *client =
 			(jack_client_internal_t *) node->data;
 		if (client->control->active_slowsync &&
@@ -112,8 +113,9 @@ jack_sync_poll_start (jack_engine_t *engine)
 {
 	JSList *node;
 	long sync_count = 0;		/* count slow-sync clients */
+	int curr_chain = engine->control->current_process_chain;
 
-	for (node = engine->clients; node; node = jack_slist_next (node)) {
+	for (node = engine->process_graph_list[curr_chain]; node; node = jack_slist_next (node)) {
 		jack_client_internal_t *client =
 			(jack_client_internal_t *) node->data;
 		if (client->control->active_slowsync) {
