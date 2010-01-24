@@ -41,7 +41,7 @@
 
 #include "libjack/local.h"
 
-static void
+void
 jack_client_disconnect_ports (jack_engine_t *engine,
 			      jack_client_internal_t *client)
 {
@@ -270,6 +270,7 @@ jack_remove_clients (jack_engine_t* engine)
 					 client->control->name,
 					 jack_client_state_name (client),
 					 client->error);
+				jack_client_disconnect_ports( engine, (jack_client_internal_t *) node->data);
 				jack_remove_client (engine,
 						    (jack_client_internal_t *)
 						    node->data);

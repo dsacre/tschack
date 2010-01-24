@@ -66,3 +66,5 @@ jack_client_internal_t *
 jack_get_client_for_fd (jack_engine_t *engine, int fd);
 void
 jack_remove_client (jack_engine_t *engine, jack_client_internal_t *client);
+void jack_client_disconnect_ports (jack_engine_t *engine,
+			      jack_client_internal_t *client);

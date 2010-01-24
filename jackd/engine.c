@@ -1714,6 +1714,7 @@ jack_server_thread (void *arg)
 				  } else {
 				    jack_unlock_graph (engine);
 				    jack_lock_graph (engine);
+				    jack_client_disconnect_ports( engine, client );
 				    jack_remove_client( engine, client );
 				    jack_unlock_graph (engine);
 				    jack_rdlock_graph (engine);
