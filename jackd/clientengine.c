@@ -500,6 +500,8 @@ jack_get_client_id( jack_engine_t *engine )
 		if( engine->control->client_activation_count[i] == -1 )
 			break;
 
+	engine->control->client_activation_count[i] = 0;
+
 	return i;
 }
 
