@@ -268,7 +268,7 @@ jack_remove_clients (jack_engine_t* engine)
 					 "client %s state = %s errors"
 					 " = %d", 
 					 client->control->name,
-					 jack_client_state_name (client),
+					 jack_client_state_name (engine, client),
 					 client->error);
 				jack_client_disconnect_ports( engine, (jack_client_internal_t *) node->data);
 				jack_remove_client (engine,
@@ -279,7 +279,7 @@ jack_remove_clients (jack_engine_t* engine)
 					 "client %s state = %s errors"
 					 " = %d", 
 					 client->control->name,
-					 jack_client_state_name (client),
+					 jack_client_state_name (engine, client),
 					 client->error);
 				if (!engine->nozombies) {
 					jack_zombify_client (engine,
@@ -498,10 +498,10 @@ jack_get_client_id( jack_engine_t *engine )
 {
 	int i;
 	for( i=0; i<JACK_MAX_CLIENTS; i++ )
-		if( engine->control->client_activation_count[i] == -1 )
+		if( engine->control->per_client[i].activation_count == -1 )
 			break;
 
-	engine->control->client_activation_count[i] = 0;
+	engine->control->per_client[i].activation_count = 0;
 
 	return i;
 }
@@ -850,7 +850,7 @@ jack_client_activate (jack_engine_t *engine, jack_client_id_t id)
 	jack_client_internal_t *client;
 	JSList *node;
 	int ret = -1;
-	int setup_chain = (engine->control->current_process_chain+1)&1;
+	//int setup_chain = (engine->control->current_process_chain+1)&1;
 
 	jack_lock_graph (engine);
 
@@ -964,7 +964,7 @@ jack_mark_client_socket_error (jack_engine_t *engine, int fd)
         if (client) {
 		VERBOSE (engine, "marking client %s with SOCKET error state = "
 			 "%s errors = %d", client->control->name,
-			 jack_client_state_name (client),
+			 jack_client_state_name (engine, client),
 			 client->error);
 		client->error += JACK_ERROR_WITH_SOCKETS;
 	}
@@ -997,7 +997,7 @@ jack_client_delete (jack_engine_t *engine, jack_client_internal_t *client)
 		jack_destroy_shm (&client->control_shm);
 	}
 
-	engine->control->client_activation_count[id] = -1;
+	engine->control->per_client[id].activation_count = -1;
 
 	free (client);
 }

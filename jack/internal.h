@@ -149,6 +149,14 @@ typedef enum {
     TransportCommandStop = 2,
 } transport_command_t;
 
+typedef enum {
+	NotTriggered,
+	Triggered,
+	Signaled,
+	Running,
+	Finished
+} jack_client_state_t;
+
 typedef struct {
 
 	volatile uint32_t       guard1;
@@ -165,6 +173,15 @@ typedef struct {
 	float    filter_coefficient; /* set once, never altered */
 
 } POST_PACKED_STRUCTURE jack_frame_timer_t;
+
+typedef struct {
+    _Atomic_word	activation_count;
+    _Atomic_word	signal_token;
+    volatile uint64_t	triggered_at;
+    volatile uint64_t	signalled_at;
+    volatile jack_client_state_t state;   /* w: engine and client r: engine */
+
+} POST_PACKED_STRUCTURE jack_per_client_ctl_t;
 
 /* JACK engine shared memory data structure. */
 typedef struct {
@@ -203,7 +220,8 @@ typedef struct {
     int32_t		  problems;
     volatile int32_t	  current_process_chain;
     volatile int32_t	  next_process_chain;
-    _Atomic_word client_activation_count[JACK_MAX_CLIENTS];
+    volatile _Atomic_word execution_tokens;
+    jack_per_client_ctl_t per_client[JACK_MAX_CLIENTS];
     jack_port_type_id_t	  n_port_types;
     jack_port_type_info_t port_types[JACK_MAX_PORT_TYPES];
     jack_port_shared_t    ports[0];
@@ -247,19 +265,12 @@ typedef enum {
 	ClientExternal  /* client is in another process */
 } ClientType;
 
-typedef enum {
-	NotTriggered,
-	Triggered,
-	Running,
-	Finished
-} jack_client_state_t;
 
 /* JACK client shared memory data structure. */
 typedef volatile struct {
 
     volatile jack_client_id_t id;         /* w: engine r: engine and client */
     volatile jack_nframes_t  nframes;     /* w: engine r: client */
-    volatile jack_client_state_t state;   /* w: engine and client r: engine */
     volatile char	name[JACK_CLIENT_NAME_SIZE];
     volatile ClientType type;             /* w: engine r: engine and client */
     volatile int8_t     active;           /* w: engine r: engine and client */
@@ -273,7 +284,6 @@ typedef volatile struct {
     volatile int8_t     sync_new;         /* w: engine and client, r: engine */
     volatile pid_t      pid;              /* w: client r: engine; client pid */
     volatile pid_t      pgrp;             /* w: client r: engine; client pgrp */
-    volatile uint64_t	signalled_at;
     volatile uint64_t	awake_at;
     volatile uint64_t	finished_at;
     volatile int32_t	last_status;         /* w: client, r: engine and client */

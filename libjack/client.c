@@ -541,9 +541,10 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
   // do not close unused fds, because we need to wait until
   // the other cycle is through.
 
+	int i;
 	char path[PATH_MAX+1];
 	int setup_chain = (client->engine->current_process_chain+1)&1;
-	JSList *pnode, *cnode;
+	JSList *pnode;
 
 	DEBUG ("graph reorder... n=%d\n", event->x.n );
 	jack_error( "reorder for chain %d next chain: %d", setup_chain, client->engine->next_process_chain );
@@ -569,26 +570,24 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 		pthread_mutex_lock( &port->connection_lock );
 		jack_slist_free( port->connections_rt[setup_chain] );
 		port->connections_rt[setup_chain] = jack_slist_copy( port->connections_locked );
-		if (port->shared->flags & JackPortIsInput) {
-		  pthread_mutex_unlock( &port->connection_lock );
-		  continue;
-		}
 
-		for (cnode = port->connections_locked; cnode; cnode = jack_slist_next (cnode))
-		{
-			jack_port_t *dst = cnode->data;
-			jack_client_id_t dst_id = dst->shared->client_id;
-			if( client->graph_next_fds_array[dst_id] != -1 )
-				continue;
-
-			snprintf (path, sizeof(path), "%s-%d", client->fifo_prefix, dst_id);
-			if ((client->graph_next_fds_array[dst_id] = open (path, O_WRONLY|O_NONBLOCK)) < 0) {
-				jack_error ("cannot open specified fifo [%s] for writing (%s)",
-						path, strerror (errno));
-				return -1;
-			}
-		}
 		pthread_mutex_unlock( &port->connection_lock );
+	}
+
+	for (i = 0; i<JACK_MAX_CLIENTS; i++)
+	{
+		if( client->graph_next_fds_array[i] != -1 )
+			continue;
+
+		if( client->engine->per_client[i].activation_count == -1 )
+			continue;
+
+		snprintf (path, sizeof(path), "%s-%d", client->fifo_prefix, i);
+		if ((client->graph_next_fds_array[i] = open (path, O_WRONLY|O_NONBLOCK)) < 0) {
+			jack_error ("cannot open specified fifo [%s] for writing (%s)",
+					path, strerror (errno));
+			return -1;
+		}
 	}
 
 	if (client->engine->problems) {
@@ -1681,6 +1680,16 @@ jack_client_graph_wait( jack_client_t* client )
 	return 0;
 }
 
+static int 
+jack_get_execution_token( jack_client_t *client )
+{
+	if( __exchange_and_add( &(client->engine->execution_tokens), -1 ) < 1 ) {
+	  __exchange_and_add( &(client->engine->execution_tokens), 1 ); 
+	  return 0;
+	}
+	return 1;
+}
+
 static int
 jack_wake_next_client (jack_client_t* client, int curr_chain)
 {
@@ -1688,6 +1697,8 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 	int pret = 0;
 	char c = 0;
 	JSList *pnode, *cnode;
+	int still_have_token;
+	int i;
 
 
 	// TODO:
@@ -1721,23 +1732,56 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 				continue;
 			if( __exchange_and_add( &(dst->shared->activation_count), -1 ) == 1 )
 			{
-				_Atomic_word *cla = &( client->engine->client_activation_count[dst_id] );
+				_Atomic_word *cla = &( client->engine->per_client[dst_id].activation_count );
 				if( __exchange_and_add( cla, -1 ) == 1 ) {
-					// time to wakeup...
-					if (write (client->graph_next_fds_array[dst_id], &c, sizeof (c))
-							!= sizeof (c)) {
-						DEBUG("cannot write byte to fd %d for id", 
-						    client->graph_next_fds_array[dst_id], dst_id );
-						jack_error ("cannot continue execution of the "
-								"processing graph (%s)",
-								strerror(errno));
-						return -1;
-					}
+					// set the client to triggered.
+					client->engine->per_client[dst_id].state = Triggered;
+					client->engine->per_client[dst_id].triggered_at = jack_get_microseconds();
+
 				}
 			}
 		}
 		pthread_mutex_unlock( &port->connection_lock );
 	}
+
+	// now check runnable tasks and hand out all available execution tokens.
+	// we already hold one.
+	still_have_token = 1;
+	for( i=0; i<JACK_MAX_CLIENTS; i++ ) 
+	{
+		if( client->engine->per_client[i].state != Triggered )
+			continue;
+
+		if( still_have_token || jack_get_execution_token(client) )
+		{
+			// now make sure we are the only one signaling this client.
+			if (__exchange_and_add( &(client->engine->per_client[i].signal_token), -1 ) == 1 )
+			{
+				client->engine->per_client[i].state = Signaled;
+				client->engine->per_client[i].signalled_at = jack_get_microseconds();
+
+				if (write (client->graph_next_fds_array[i], &c, sizeof (c))
+						!= sizeof (c)) {
+					DEBUG("cannot write byte to fd %d for id", 
+							client->graph_next_fds_array[i], i );
+					jack_error ("cannot continue execution of the "
+							"processing graph (%s)",
+							strerror(errno));
+					return -1;
+				}
+				still_have_token = 0;
+			} else {
+				if( !still_have_token )
+					__atomic_add( &(client->engine->execution_tokens), 1 );
+			}
+		} else {
+			// no more tokens. we are done here.
+			break;
+		}
+	}
+
+	if( still_have_token )
+		__atomic_add( &(client->engine->execution_tokens), 1 )
 	
 	DEBUG ("client sent message to next stage by %" PRIu64 "",
 	       jack_get_microseconds());
@@ -1825,7 +1869,7 @@ jack_thread_wait (jack_client_t* client, int status)
 
 	/* Time to do data processing */
 
-	client->control->state = Running;
+	client->engine->per_client[client->control->id].state = Running;
 	
 	/* begin preemption checking */
 	CHECK_PREEMPTION (client->engine, TRUE);
@@ -1848,7 +1892,7 @@ jack_nframes_t jack_cycle_wait (jack_client_t* client)
 
 	/* Time to do data processing */
 
-	client->control->state = Running;
+	client->engine->per_client[client->control->id].state = Running;
 	
 	/* begin preemption checking */
 	CHECK_PREEMPTION (client->engine, TRUE);
@@ -1916,7 +1960,7 @@ jack_process_thread_aux (void *arg)
 				int status = (client->process (control->nframes, 
 								client->process_arg) ==
 					      control->nframes);
-				control->state = Finished;
+				client->engine->per_client[control->id].state = Finished;
 				DEBUG("client leaves process(), re-enters wait");
 				if (!jack_thread_wait (client, status)) {
 					break;
@@ -2134,13 +2178,6 @@ jack_activate (jack_client_t *client)
 	 * pages are actually mapped (more important for mlockall(2)
 	 * usage in jack_start_thread())
 	 */
-         
-	//char buf[JACK_THREAD_STACK_TOUCH];
-	int i;
-
-	//for (i = 0; i < JACK_THREAD_STACK_TOUCH; i++) {
-	//	buf[i] = (char) (i & 0xff);
-	//}
 
 	if (client->control->type == ClientInternal ||
 	    client->control->type == ClientDriver) {

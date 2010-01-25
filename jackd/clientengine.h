@@ -28,7 +28,7 @@ jack_client_is_internal (jack_client_internal_t *client)
 }
 
 static inline char *
-jack_client_state_name (jack_client_internal_t *client)
+jack_client_state_name (jack_engine_t *engine, jack_client_internal_t *client)
 {
 	static char *client_state_names[] = {
 		"Not triggered",
@@ -37,7 +37,8 @@ jack_client_state_name (jack_client_internal_t *client)
 		"Finished"
 	};
 
-	return client_state_names[client->control->state];
+	jack_client_state_t state = engine->control->per_client[client->control->id].state;
+	return client_state_names[state];
 }
 
 #define JACK_ERROR_WITH_SOCKETS 10000000

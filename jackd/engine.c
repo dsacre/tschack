@@ -86,7 +86,7 @@ static int                    jack_port_assign_buffer (jack_engine_t *,
 static jack_port_internal_t *jack_get_port_by_name (jack_engine_t *,
 						    const char *name);
 static int  jack_rechain_graph (jack_engine_t *engine);
-static void jack_clear_fifos (jack_engine_t *engine);
+//static void jack_clear_fifos (jack_engine_t *engine);
 static int  jack_port_do_connect (jack_engine_t *engine,
 				  const char *source_port,
 				  const char *destination_port);
@@ -562,7 +562,7 @@ jack_set_buffer_size_request (jack_engine_t *engine, jack_nframes_t nframes)
 	return rc;
 }
 
-
+#if 0
 static JSList * 
 jack_process_internal(jack_engine_t *engine, JSList *node,
 		      jack_nframes_t nframes)
@@ -576,7 +576,7 @@ jack_process_internal(jack_engine_t *engine, JSList *node,
 	/* internal client */
 
 	DEBUG ("invoking an internal client's callbacks");
-	ctl->state = Running;
+	engine->control->per_client[ctl->id].state = Running;
 	engine->current_client = client;
 
 	/* XXX how to time out an internal client? */
@@ -593,13 +593,14 @@ jack_process_internal(jack_engine_t *engine, JSList *node,
 	if (ctl->timebase_cb_cbset)
 		jack_call_timebase_master (client->private_client);
 		
-	ctl->state = Finished;
+	engine->control->per_client[ctl->id].state = Finished;
 
 	if (engine->process_errors)
 		return NULL;		/* will stop the loop */
 	else
 		return jack_slist_next (node);
 }
+#endif
 
 #ifdef __linux
 
@@ -818,28 +819,46 @@ jack_process_external(jack_engine_t *engine, JSList *node)
 #endif /* JACK_USE_MACH_THREADS */
 
 static int 
+jack_engine_get_execution_token( jack_engine_t *engine )
+{
+	if( __exchange_and_add( &(engine->control->execution_tokens), -1 ) < 1 ) {
+	  __exchange_and_add( &(engine->control->execution_tokens), 1 ); 
+	  return 0;
+	}
+	return 1;
+}
+
+static int 
 jack_engine_trigger_client (jack_engine_t *engine, jack_client_internal_t *client )
 {
 	char c = 0;
 	//struct pollfd pfd[1];
 	jack_client_control_t *ctl;
-	//int curr_chain = engine->control->current_process_chain;
+	jack_per_client_ctl_t *pcl = & (engine->control->per_client[client->control->id]);
+	//int curr_chain = engine->control->current_process_chain; 
 
 	ctl = client->control;
 
-	/* a race exists if we do this after the write(2) */
-	ctl->state = Triggered; 
+	if( jack_engine_get_execution_token( engine ) ) 
+	{
+		/* a race exists if we do this after the write(2) */
+		pcl->state = Signaled; 
 
-	ctl->signalled_at = jack_get_microseconds();
+		pcl->triggered_at = jack_get_microseconds();
+		pcl->signalled_at = jack_get_microseconds();
 
-	if (write (client->subgraph_start_fd, &c, sizeof (c)) != sizeof (c)) {
-		jack_error ("cannot initiate graph processing (%s)",
-			    strerror (errno));
-		engine->process_errors++;
-		// we already hold the problem lock.
-		engine->problems++;
-		return -1; /* will stop the loop */
-	} 
+		if (write (client->subgraph_start_fd, &c, sizeof (c)) != sizeof (c)) {
+			jack_error ("cannot initiate graph processing (%s)",
+					strerror (errno));
+			engine->process_errors++;
+			// we already hold the problem lock.
+			engine->problems++;
+			return -1; /* will stop the loop */
+		} 
+	} else {
+		pcl->state = Triggered; 
+		pcl->triggered_at = jack_get_microseconds();
+	}
 
 	return 0;
 }
@@ -854,7 +873,7 @@ jack_engine_wait_graph (jack_engine_t *engine)
 	jack_time_t poll_timeout_usecs;
 	jack_time_t now, then;
 	int pollret;
-	int curr_chain = engine->control->current_process_chain;
+	//int curr_chain = engine->control->current_process_chain;
 
 	then = jack_get_microseconds ();
 
@@ -962,8 +981,12 @@ jack_engine_process (jack_engine_t *engine, jack_nframes_t nframes)
 	for (node = engine->process_graph_list[curr_chain]; node; node = jack_slist_next (node)) {
 		client = (jack_client_internal_t *) node->data;
 		jack_client_control_t *ctl = client->control;
+		jack_per_client_ctl_t *pcl = & (engine->control->per_client[client->control->id]);
 
-		ctl->state = NotTriggered;
+		pcl->state = NotTriggered;
+		pcl->signal_token = 1;
+		pcl->signalled_at = 0;
+		pcl->triggered_at = 0;
 		ctl->nframes = nframes;
 		ctl->timed_out = 0;
 		ctl->awake_at = 0;
@@ -974,9 +997,11 @@ jack_engine_process (jack_engine_t *engine, jack_nframes_t nframes)
 		  port->shared->activation_count = engine->port_activation_counts_init[curr_chain][port->shared->id];
 		}
 
-		engine->control->client_activation_count[ctl->id] = 
+		pcl->activation_count = 
 		  engine->client_activation_counts_init[curr_chain][ctl->id];
 	}
+
+	engine->control->execution_tokens = 2;
 
 	for (node = engine->server_wakeup_list[curr_chain]; node; node=jack_slist_next(node) ) {
 
@@ -2064,7 +2089,7 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	engine->control->next_process_chain = 0;
 
 	for( i=0; i<JACK_MAX_CLIENTS; i++ )
-		engine->control->client_activation_count[i] = -1;
+		engine->control->per_client[i].activation_count = -1;
 	
 
 
@@ -2881,25 +2906,6 @@ jack_deliver_event (jack_engine_t *engine, jack_client_internal_t *client,
 	return 0;
 }
 
-static int
-connection_is_feedback( jack_engine_t *engine, jack_port_internal_t *own_port, jack_port_internal_t *other_port )
-{
-  JSList *node;
-
-  if( own_port->shared->client_id == other_port->shared->client_id )
-    return 1;
-
-  for( node=engine->clients; node; node=jack_slist_next(node) ) {
-    jack_client_internal_t *client = node->data;
-    if(client->control->id == other_port->shared->client_id)
-      return 1;
-    if(client->control->id == own_port->shared->client_id)
-      return 0;
-  }
-
-  return 0;
-}
-
 int
 jack_rechain_graph (jack_engine_t *engine)
 {
@@ -3383,7 +3389,7 @@ void jack_dump_configuration(jack_engine_t *engine, int take_lock)
 	jack_port_internal_t *port;
 	jack_connection_internal_t* connection;
 	int n, m, o;
-	int curr_chain = engine->control->current_process_chain;
+	//int curr_chain = engine->control->current_process_chain;
 	
 	jack_info ("engine.c: <-- dump begins -->");
 
@@ -3857,6 +3863,7 @@ jack_get_fifo_fd (jack_engine_t *engine, unsigned int which_fifo)
 	return engine->fifo[which_fifo];
 }
 
+#if 0
 static void
 jack_clear_fifos (jack_engine_t *engine)
 {
@@ -3880,6 +3887,7 @@ jack_clear_fifos (jack_engine_t *engine)
 		}
 	}
 }
+#endif
 
 static int
 jack_use_driver (jack_engine_t *engine, jack_driver_t *driver)
