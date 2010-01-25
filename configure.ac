@@ -73,7 +73,7 @@ dnl that would break applications statically linked with an older
 dnl version of libjack. NOTE: statically linking to libjack
 dnl is a huge mistake.
 dnl ---
-JACK_PROTOCOL_VERSION=24
+JACK_PROTOCOL_VERSION=200
 
 dnl ---
 dnl HOWTO: updating the libjack interface version
@@ -113,7 +113,7 @@ AC_SUBST(JACK_SO_VERSION)
 AC_SUBST(JACK_VERSION)
 AC_SUBST(JACK_RELEASE)
 
-AM_INIT_AUTOMAKE(jack-audio-connection-kit,${JACK_VERSION})
+AM_INIT_AUTOMAKE(tschack,${JACK_VERSION})
 
 dnl
 dnl save any user-provided CFLAGS so we can forget
