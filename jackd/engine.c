@@ -842,6 +842,9 @@ jack_engine_trigger_client (jack_engine_t *engine, jack_client_internal_t *clien
 	if( jack_engine_get_execution_token( engine ) ) 
 	{
 		/* a race exists if we do this after the write(2) */
+	  if (__exchange_and_add( &(pcl->signal_token), -1 ) == 1 )
+	  {
+	        DEBUG( "signaling... " );
 		pcl->state = Signaled; 
 
 		pcl->triggered_at = jack_get_microseconds();
@@ -855,7 +858,11 @@ jack_engine_trigger_client (jack_engine_t *engine, jack_client_internal_t *clien
 			engine->problems++;
 			return -1; /* will stop the loop */
 		} 
+	  } else {
+	    __atomic_add( &(engine->control->execution_tokens), 1 ); 
+	  }
 	} else {
+	        DEBUG( "only setting the trigger." );
 		pcl->state = Triggered; 
 		pcl->triggered_at = jack_get_microseconds();
 	}
@@ -873,7 +880,7 @@ jack_engine_wait_graph (jack_engine_t *engine)
 	jack_time_t poll_timeout_usecs;
 	jack_time_t now, then;
 	int pollret;
-	//int curr_chain = engine->control->current_process_chain;
+	int curr_chain = engine->control->current_process_chain;
 
 	then = jack_get_microseconds ();
 
@@ -2961,12 +2968,17 @@ jack_rechain_graph (jack_engine_t *engine)
 
 		if (client->control->active)
 	       	{
+			int has_output_connections = ( (client->control->id == 0) ? 1 : 0 );
 			for( pnode = client->ports; pnode; pnode=jack_slist_next(pnode) )
 			{
 			  jack_port_internal_t *own_port = pnode->data;
 
 			  if( own_port->shared->flags & JackPortIsOutput )
+			  {
+			    if( own_port->connections != NULL )
+			      has_output_connections = 1;
 			    continue;
+			  }
 
 			  for( cnode=own_port->connections; cnode; cnode=jack_slist_next(cnode) )
 			  {
@@ -2992,15 +3004,13 @@ jack_rechain_graph (jack_engine_t *engine)
 			    engine->client_activation_counts_init[setup_chain][client->control->id] += 1;
 			}
 
+			if( has_output_connections == 0 ) {
+			  VERBOSE( engine, "no outs... adding to driver 0 count" );
+			  engine->client_activation_counts_init[setup_chain][0] += 1;
+			}
 
 			// ok ... everything counted.. 
 
-			if( engine->client_activation_counts_init[setup_chain][client->control->id] == 0 )
-			{
-			  // this client needs to be triggered by jackd.
-			  engine->server_wakeup_list[setup_chain] = 
-			    jack_slist_append( engine->server_wakeup_list[setup_chain], client );
-			}
 			engine->process_graph_list[setup_chain] = 
 			  jack_slist_append( engine->process_graph_list[setup_chain], client );
 
@@ -3021,6 +3031,18 @@ jack_rechain_graph (jack_engine_t *engine)
 		}
 	}
 
+	// now determine the clients, the server needs to wakeup directly.
+	for (node = engine->process_graph_list[setup_chain]; node; node = jack_slist_next(node)) 
+	{
+		client = (jack_client_internal_t *) node->data;
+		// driver refcount might change after this, we need to delay this check.
+		if( engine->client_activation_counts_init[setup_chain][client->control->id] == 0 )
+		{
+			// this client needs to be triggered by jackd.
+			engine->server_wakeup_list[setup_chain] = 
+				jack_slist_append( engine->server_wakeup_list[setup_chain], client );
+		}
+	}
 
 	// chain is setup.
 	// now we need to trigger the swap.
