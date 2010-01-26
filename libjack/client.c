@@ -1750,11 +1750,9 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 	if( output_connections == 0 ) {
 	  // no output connections. 
 	  // we just trigger the driver.
-	  jack_error( "no outputs..." );
 	  _Atomic_word *cla = &( client->engine->per_client[0].activation_count );
 	  if( __exchange_and_add( cla, -1 ) == 1 ) {
 	    // set the client to triggered.
-	    jack_error( "triggering driver" );
 	    client->engine->per_client[0].state = Triggered;
 	    client->engine->per_client[0].triggered_at = jack_get_microseconds();
 	  }
