@@ -1937,7 +1937,10 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	pthread_rwlock_init (&engine->client_lock, 0);
 	pthread_mutex_init (&engine->port_lock, 0);
 	pthread_mutex_init (&engine->request_lock, 0);
-	pthread_mutex_init (&engine->problem_lock, 0);
+
+	pthread_mutexattr_init(&engine->problem_attr);
+	pthread_mutexattr_settype(&engine->problem_attr, PTHREAD_MUTEX_RECURSIVE_NP );
+	pthread_mutex_init (&engine->problem_lock, &engine->problem_attr);
 
 	engine->clients = 0;
 

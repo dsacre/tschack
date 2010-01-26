@@ -78,6 +78,7 @@ struct _jack_engine {
     pthread_mutex_t request_lock; /* precedes client_lock */
     pthread_rwlock_t client_lock;
     pthread_mutex_t port_lock;
+    pthread_mutexattr_t problem_attr;
     pthread_mutex_t problem_lock; /* must hold write lock on client_lock */
     int		    process_errors;
     int		    period_msecs;
