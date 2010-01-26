@@ -66,6 +66,7 @@ static unsigned int port_max = 256;
 static int do_unlock = 0;
 static jack_nframes_t frame_time_offset = 0;
 static int nozombies = 0;
+static int jobs = 32;
 
 extern int sanitycheck (int, int);
 
@@ -149,7 +150,7 @@ jack_main (jack_driver_desc_t * driver_desc, JSList * driver_params)
 				       do_mlock, do_unlock, server_name,
 				       temporary, verbose, client_timeout,
 				       port_max, getpid(), frame_time_offset, 
-				       nozombies, drivers)) == 0) {
+				       nozombies, jobs, drivers)) == 0) {
 		jack_error ("cannot create engine");
 		return -1;
 	}
@@ -521,7 +522,7 @@ main (int argc, char *argv[])
 	int do_sanity_checks = 1;
 	int show_version = 0;
 
-	const char *options = "-d:P:uvshVrRZTFlt:mn:Np:c:";
+	const char *options = "-d:P:uvshVrRZTFlt:mn:Np:c:j:";
 	struct option long_options[] = 
 	{ 
 		/* keep ordered by single-letter option code */
@@ -529,6 +530,7 @@ main (int argc, char *argv[])
 		{ "clock-source", 1, 0, 'c' },
 		{ "driver", 1, 0, 'd' },
 		{ "help", 0, 0, 'h' },
+		{ "jobs", 1, 0, 'j' },
 		{ "tmpdir-location", 0, 0, 'l' },
 		{ "no-mlock", 0, 0, 'm' },
 		{ "name", 1, 0, 'n' },
@@ -587,6 +589,10 @@ main (int argc, char *argv[])
 
 		case 'D':
 			frame_time_offset = JACK_MAX_FRAMES - atoi(optarg); 
+			break;
+
+		case 'j':
+			jobs = atoi (optarg);
 			break;
 
 		case 'l':

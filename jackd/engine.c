@@ -1008,7 +1008,7 @@ jack_engine_process (jack_engine_t *engine, jack_nframes_t nframes)
 		  engine->client_activation_counts_init[curr_chain][ctl->id];
 	}
 
-	engine->control->execution_tokens = 2;
+	engine->control->execution_tokens = engine->jobs;
 
 	for (node = engine->server_wakeup_list[curr_chain]; node; node=jack_slist_next(node) ) {
 
@@ -1853,7 +1853,7 @@ jack_engine_t *
 jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 		 const char *server_name, int temporary, int verbose,
 		 int client_timeout, unsigned int port_max, pid_t wait_pid,
-		 jack_nframes_t frame_time_offset, int nozombies, JSList *drivers)
+		 jack_nframes_t frame_time_offset, int nozombies, int jobs, JSList *drivers)
 {
 	jack_engine_t *engine;
 	unsigned int i;
@@ -1923,6 +1923,7 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	engine->feedbackcount = 0;
 	engine->wait_pid = wait_pid;
 	engine->nozombies = nozombies;
+	engine->jobs = jobs;
 	engine->removing_clients = 0;
 
 	engine->audio_out_cnt = 0;

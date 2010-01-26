@@ -124,6 +124,7 @@ struct _jack_engine {
     pid_t           wait_pid;
     pthread_t       freewheel_thread;
     int             nozombies;
+    int		    jobs;
     volatile int    problems;
     volatile int    pending_chain;
 
@@ -181,7 +182,7 @@ jack_engine_t  *jack_engine_new (int real_time, int real_time_priority,
 				 const char *server_name, int temporary,
 				 int verbose, int client_timeout,
 				 unsigned int port_max,
-                                 pid_t waitpid, jack_nframes_t frame_time_offset, int nozombies, 
+                                 pid_t waitpid, jack_nframes_t frame_time_offset, int nozombies, int jobs,
 				 JSList *drivers);
 void		jack_engine_delete (jack_engine_t *);
 int		jack_run (jack_engine_t *engine);
