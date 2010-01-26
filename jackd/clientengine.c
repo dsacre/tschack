@@ -501,6 +501,7 @@ jack_get_client_id( jack_engine_t *engine )
 		if( engine->control->per_client[i].activation_count == -1 )
 			break;
 
+	jack_get_fifo_fd (engine, i);
 	engine->control->per_client[i].activation_count = 0;
 
 	return i;
@@ -864,13 +865,6 @@ jack_client_activate (jack_engine_t *engine, jack_client_id_t id)
 
 			jack_transport_activate(engine, client);
 
-			/* we call this to make sure the FIFO is
-			 * built+ready by the time the client needs
-			 * it. we don't care about the return value at
-			 * this point.
-			 */
-
-			jack_get_fifo_fd (engine, id);
 			jack_sort_graph (engine);
 
 			ret = 0;
