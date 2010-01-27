@@ -116,6 +116,7 @@ struct _jack_engine {
     volatile char   freewheeling;
     volatile char   stop_freewheeling;
     jack_client_id_t fwclient;
+    pthread_t       freewheel_thread;
     char	    verbose;
     char	    do_munlock;
     const char	   *server_name;
@@ -125,7 +126,6 @@ struct _jack_engine {
     int		    feedbackcount;
     int             removing_clients;
     pid_t           wait_pid;
-    pthread_t       freewheel_thread;
     int             nozombies;
     int		    jobs;
     volatile int    problems;

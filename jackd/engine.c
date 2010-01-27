@@ -1954,6 +1954,7 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	engine->server_name = server_name;
 	engine->temporary = temporary;
 	engine->freewheeling = 0;
+	engine->stop_freewheeling = 0;
 	engine->fwclient = 0;
 	engine->feedbackcount = 0;
 	engine->wait_pid = wait_pid;
@@ -2256,7 +2257,7 @@ jack_engine_freewheel (void *arg)
 
 	client = jack_client_internal_by_id (engine, engine->fwclient);
 
-	while (! engine->stop_freewheeling) {
+	while (!engine->stop_freewheeling) {
 
 		jack_run_one_cycle (engine, engine->control->buffer_size, 0.0f);
 
@@ -2347,6 +2348,9 @@ jack_stop_freewheeling (jack_engine_t* engine, int engine_exiting)
 	VERBOSE (engine, "freewheeling stopped, waiting for thread");
 	pthread_join (engine->freewheel_thread, &ftstatus);
 	VERBOSE (engine, "freewheel thread has returned");
+
+	engine->fwclient = 0;
+	engine->freewheeling = 0;
 
 	engine->fwclient = 0;
 	engine->freewheeling = 0;
