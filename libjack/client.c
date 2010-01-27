@@ -2315,7 +2315,12 @@ jack_client_close_aux (jack_client_t *client)
 		}
 #else
 		jack_error( "shutdown sequence..." );
-		if (client->control->process_cbset) {
+		if (client->control->process_cbset)
+	       	{
+			char c=0;
+			close( client->graph_wait_fd );
+			client->graph_wait_fd = -1;
+			write( client->process_pipe[1], &c, 1 );
 
 			pthread_mutex_lock( &client->process_mutex );
 			jack_error( "got process mutex." );
