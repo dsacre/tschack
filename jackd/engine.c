@@ -899,7 +899,7 @@ jack_engine_wait_graph (jack_engine_t *engine)
 	then = jack_get_microseconds ();
 
 	if (engine->freewheeling) {
-		poll_timeout_usecs = 10000000; /* 10 seconds */
+		poll_timeout_usecs = 250000; /* 0.25 seconds */
 	} else {
 		poll_timeout_usecs = (engine->client_timeout_msecs > 0 ?
 				engine->client_timeout_msecs * 1000 :
