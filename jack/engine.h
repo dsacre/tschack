@@ -113,7 +113,8 @@ struct _jack_engine {
     unsigned long   fifo_size;
     unsigned long   external_client_cnt;
     int		    rtpriority;
-    char	    freewheeling;
+    volatile char   freewheeling;
+    volatile char   stop_freewheeling;
     jack_client_id_t fwclient;
     char	    verbose;
     char	    do_munlock;

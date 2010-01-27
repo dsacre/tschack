@@ -2256,7 +2256,7 @@ jack_engine_freewheel (void *arg)
 
 	client = jack_client_internal_by_id (engine, engine->fwclient);
 
-	while (engine->freewheeling) {
+	while (! engine->stop_freewheeling) {
 
 		jack_run_one_cycle (engine, engine->control->buffer_size, 0.0f);
 
@@ -2304,6 +2304,7 @@ jack_start_freewheeling (jack_engine_t* engine, jack_client_id_t client_id)
 	}
 
 	engine->freewheeling = 1;
+	engine->stop_freewheeling = 0;
 
 	event.type = StartFreewheel;
 	jack_deliver_event_to_all (engine, &event);
@@ -2341,12 +2342,14 @@ jack_stop_freewheeling (jack_engine_t* engine, int engine_exiting)
 	   to exit.
 	*/
 
-	engine->fwclient = 0;
-	engine->freewheeling = 0;
+	engine->stop_freewheeling = 1;
 
 	VERBOSE (engine, "freewheeling stopped, waiting for thread");
 	pthread_join (engine->freewheel_thread, &ftstatus);
 	VERBOSE (engine, "freewheel thread has returned");
+
+	engine->fwclient = 0;
+	engine->freewheeling = 0;
 
 	if (!engine_exiting) {
 		/* tell everyone we've stopped */
