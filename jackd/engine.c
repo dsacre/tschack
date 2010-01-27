@@ -2455,13 +2455,6 @@ jack_run_one_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 		consecutive_excessive_delays = 0;
 	}
 
-	DEBUG ("trying to acquire read lock (FW = %d)", engine->freewheeling);
-		if (!engine->freewheeling) {
-			driver->null_cycle (driver, nframes);
-		} else {
-			/* don't return too fast */
-			usleep (1000);
-		}
 	if (jack_trylock_problems (engine)) {
 		VERBOSE (engine, "problem-lock-driven null cycle");
 		if (!engine->freewheeling) {
