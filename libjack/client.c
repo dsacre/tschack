@@ -307,7 +307,6 @@ jack_client_alloc ()
 	client->request_fd = -1;
 	client->event_fd = -1;
 	client->upstream_is_jackd = 0;
-	client->graph_wait_fd = -1;
 	client->graph_next_fd = -1;
 	client->ports = NULL;
 	client->ports_ext = NULL;
@@ -1341,6 +1340,7 @@ jack_set_freewheel (jack_client_t* client, int onoff)
 	jack_request_t request;
 
 	request.type = onoff ? FreeWheel : StopFreeWheel;
+	request.x.client_id = client->control->id;
 	return jack_client_deliver_request (client, &request);
 }
 
@@ -1657,7 +1657,8 @@ jack_client_graph_wait( jack_client_t* client )
 			}
 #endif
 		}
-		
+
+#ifndef JACK_USE_MACH_THREADS		
 		if (client->graph_wait_fd >= 0 &&
 		    (client->pollfd[WAIT_POLL_INDEX].revents & POLLIN)) {
 			DEBUG ("time to run process()\n");
@@ -1668,6 +1669,7 @@ jack_client_graph_wait( jack_client_t* client )
 			pthread_cond_wait( &client->process_wakeup, &client->process_mutex );
 			jack_error ("wakup");
 		}
+#endif
 	}
 
 	// XXX: maybe this is contraproductive.
@@ -1989,7 +1991,7 @@ jack_process_thread_aux (void *arg)
 	jack_client_thread_suicide (client);
 }
 
-static void *
+static void* 
 jack_client_thread (void *arg)
 {
 	jack_client_t *client = (jack_client_t *) arg;
