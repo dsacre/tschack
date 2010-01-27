@@ -2783,7 +2783,7 @@ jack_reset_max_delayed_usecs (jack_client_t *client)
 pthread_t
 jack_client_thread_id (jack_client_t *client)
 {
-	return client->thread_id;
+	return client->process_thread;
 }
 
 int
