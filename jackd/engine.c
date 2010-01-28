@@ -425,8 +425,8 @@ jack_engine_place_port_buffers (jack_engine_t* engine,
 	pthread_mutex_unlock (&pti->lock);
 }
 
-// JOQ: this should have a return code...
-static void
+
+static int
 jack_resize_port_segment (jack_engine_t *engine,
 			  jack_port_type_id_t ptid,
 			  unsigned long nports)
@@ -437,14 +437,7 @@ jack_resize_port_segment (jack_engine_t *engine,
 	jack_port_type_info_t* port_type = &engine->control->port_types[ptid];
 	jack_shm_info_t* shm_info = &engine->port_segment[ptid];
 
-	if (port_type->buffer_scale_factor < 0) {
-		one_buffer = port_type->buffer_size;
-	} else {
-		one_buffer = sizeof (jack_default_audio_sample_t)
-			* port_type->buffer_scale_factor
-			* engine->control->buffer_size;
-	}
-
+	one_buffer = jack_port_type_buffer_size (port_type, engine->control->buffer_size);
 	VERBOSE (engine, "resizing port buffer segment for type %d, one buffer = %u bytes", ptid, one_buffer);
 
 	size = nports * one_buffer;
@@ -456,13 +449,13 @@ jack_resize_port_segment (jack_engine_t *engine,
 				    " bytes (%s)", 
 				    size,
 				    strerror (errno));
-			return;
+			return -1;
 		}
 		
 		if (jack_attach_shm (shm_info)) {
 			jack_error ("cannot attach to new port segment "
 				    "(%s)", strerror (errno));
-			return;
+			return -1;
 		}
 
 		engine->control->port_types[ptid].shm_registry_index =
@@ -475,7 +468,7 @@ jack_resize_port_segment (jack_engine_t *engine,
 			jack_error ("cannot resize port segment to %d bytes,"
 				    " (%s)", size,
 				    strerror (errno));
-			return;
+			return -1;
 		}
 	}
 
@@ -505,6 +498,10 @@ jack_resize_port_segment (jack_engine_t *engine,
 	event.type = AttachPortSegment;
 	event.y.ptid = ptid;
 	jack_deliver_event_to_all (engine, &event);
+
+	/* XXX need to clean up in the evnt of failures */
+
+	return 0;
 }
 
 /* The driver invokes this callback both initially and whenever its
@@ -525,7 +522,9 @@ jack_driver_buffer_size (jack_engine_t *engine, jack_nframes_t nframes)
 			jack_rolling_interval (engine->driver->period_usecs);
 
 	for (i = 0; i < engine->control->n_port_types; ++i) {
-		jack_resize_port_segment (engine, i, engine->control->port_max);
+		if (jack_resize_port_segment (engine, i, engine->control->port_max)) {
+			return -1;
+		}
 	}
 
 	/* update shared client copy of nframes */
@@ -2818,7 +2817,7 @@ jack_deliver_event (jack_engine_t *engine, jack_client_internal_t *client,
 			break;
 
 		case BufferSizeChange:
-			jack_client_invalidate_port_buffers
+			jack_client_fix_port_buffers
 				(client->private_client);
 
 			if (client->control->bufsize_cbset) {
