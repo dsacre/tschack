@@ -39,6 +39,7 @@
 #include <jack/shm.h>
 #include <jack/driver_parse.h>
 #include <jack/messagebuffer.h>
+#include <jack/midiport.h>
 
 #ifdef USE_CAPABILITIES
 
@@ -522,7 +523,7 @@ main (int argc, char *argv[])
 	int do_sanity_checks = 1;
 	int show_version = 0;
 
-	const char *options = "-d:P:uvshVrRZTFlt:mn:Np:c:j:";
+	const char *options = "-d:P:uvshVrRZTFlt:mM:n:Np:c:j:";
 	struct option long_options[] = 
 	{ 
 		/* keep ordered by single-letter option code */
@@ -533,6 +534,7 @@ main (int argc, char *argv[])
 		{ "jobs", 1, 0, 'j' },
 		{ "tmpdir-location", 0, 0, 'l' },
 		{ "no-mlock", 0, 0, 'm' },
+		{ "midi-bufsize", 1, 0, 'M' },
 		{ "name", 1, 0, 'n' },
                 { "no-sanity-checks", 0, 0, 'N' },
 		{ "port-max", 1, 0, 'p' },
@@ -555,6 +557,7 @@ main (int argc, char *argv[])
 	char *driver_name = NULL;
 	char **driver_args = NULL;
 	JSList * driver_params;
+	size_t midi_buffer_size = 0;
 	int driver_nargs = 1;
 	int i;
 	int rc;
@@ -602,6 +605,10 @@ main (int argc, char *argv[])
 
 		case 'm':
 			do_mlock = 0;
+			break;
+
+		case 'M':
+			midi_buffer_size = (unsigned int) atol (optarg);
 			break;
 
 		case 'n':
@@ -696,6 +703,15 @@ main (int argc, char *argv[])
 	if (!drivers) {
 		fprintf (stderr, "jackd: no drivers found; exiting\n");
 		exit (1);
+	}
+	
+	if (midi_buffer_size != 0) {
+		jack_port_type_info_t* port_type = &jack_builtin_port_types[JACK_MIDI_PORT_TYPE];
+		port_type->buffer_size = midi_buffer_size * jack_midi_internal_event_size ();
+		port_type->buffer_scale_factor = -1;
+		if (verbose) {
+			fprintf (stderr, "Set MIDI buffer size to %u bytes\n", port_type->buffer_size);
+		}
 	}
 
 	desc = jack_find_driver_descriptor (driver_name);
