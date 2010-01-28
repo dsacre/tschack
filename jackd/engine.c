@@ -2771,11 +2771,11 @@ jack_notify_all_port_interested_clients (jack_engine_t *engine, jack_client_id_t
 }
 
 static void
-jack_intclient_do_reorder( jack_client_t *client )
+jack_driver_do_reorder( jack_client_t *client, jack_event_t *event )
 {
   JSList *pnode;
   int setup_chain = (client->engine->current_process_chain+1)&1;
-  MESSAGE( "intclient reorder... chain %d", setup_chain );
+
   for( pnode=client->ports; pnode; pnode=jack_slist_next(pnode) ) {
     jack_port_t *port = pnode->data;
 
@@ -2836,10 +2836,14 @@ jack_deliver_event (jack_engine_t *engine, jack_client_internal_t *client,
 			break;
 
 		case GraphReordered:
-			jack_intclient_do_reorder( client->private_client );
-			if (client->control->graph_order_cbset) {
-				client->private_client->graph_order
-					(client->private_client->graph_order_arg);
+			if (client->control->type == ClientInternal) {
+				jack_handle_reorder( client->private_client, event );
+			} else {
+				jack_driver_do_reorder( client->private_client, event );
+				if (client->control->graph_order_cbset) {
+					client->private_client->graph_order
+						(client->private_client->graph_order_arg);
+				}
 			}
 			break;
 

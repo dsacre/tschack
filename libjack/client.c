@@ -379,6 +379,16 @@ jack_client_alloc ()
 
 #endif
 
+static void
+jack_client_free (jack_client_t *client)
+{
+	if (client->pollfd) {
+		free (client->pollfd);
+	}
+
+	free (client);
+}
+
 /*
  * Build the jack_client_t structure for an internal client.
  */
@@ -392,20 +402,25 @@ jack_client_alloc_internal (jack_client_control_t *cc, jack_engine_t* engine)
 	client->control = cc;
 	client->engine = engine->control;
 	
+	pthread_mutex_init( &client->process_mutex, NULL );
+	pthread_cond_init( &client->process_wakeup, NULL );
+
+	if (pipe( client->process_pipe )) {
+		jack_error ("Unable to create process pipe");
+		jack_client_free(client);
+		return NULL;
+	}
+	client->process_pipe_fd = client->process_pipe[0];
 	client->n_port_types = client->engine->n_port_types;
 	client->port_segment = &engine->port_segment[0];
+	strcpy( client->fifo_prefix, engine->fifo_prefix );
+
+	client->pollfd[PROCESS_PIPE_INDEX].events =
+		POLLIN|POLLERR|POLLHUP|POLLNVAL;
+	client->pollfd[WAIT_POLL_INDEX].events =
+		POLLIN|POLLERR|POLLHUP|POLLNVAL;
 
 	return client;
-}
-
-static void
-jack_client_free (jack_client_t *client)
-{
-	if (client->pollfd) {
-		free (client->pollfd);
-	}
-
-	free (client);
 }
 
 void
@@ -552,7 +567,7 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 
 #else
 
-static int 
+int 
 jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 {	
   // TODO:
@@ -2219,8 +2234,27 @@ jack_activate (jack_client_t *client)
 	 * usage in jack_start_thread())
 	 */
 
-	if (client->control->type == ClientInternal ||
-	    client->control->type == ClientDriver) {
+	if (client->control->type == ClientInternal) {
+
+		pthread_mutex_lock( &client->process_mutex );
+		if (client->control->process_cbset) {
+			if (jack_client_create_thread(client,
+						&client->process_thread,
+						client->engine->client_priority,
+						client->engine->real_time,
+						jack_client_process_thread, client)) {
+				return -1;
+			}
+		} else {
+			pthread_mutex_unlock( &client->process_mutex );
+		}
+		pthread_mutex_lock( &client->process_mutex );
+		pthread_mutex_unlock( &client->process_mutex );
+
+		goto startit;
+	}
+
+	if (client->control->type == ClientDriver) {
 		goto startit;
 	}
 
