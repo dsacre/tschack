@@ -748,6 +748,8 @@ handle_unload_client (jack_engine_t *engine, jack_client_id_t id)
 	if ((client = jack_client_internal_by_id (engine, id))) {
 		VERBOSE (engine, "unloading client \"%s\"",
 			 client->control->name);
+		jack_client_disconnect_ports( engine, client );
+		jack_client_do_deactivate( engine, client, TRUE );
 		jack_remove_client (engine, client);
 		status = 0;
 	}
