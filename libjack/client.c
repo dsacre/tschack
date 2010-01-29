@@ -363,6 +363,7 @@ jack_client_alloc ()
 	client->engine = NULL;
 	client->control = NULL;
 	client->thread_ok = FALSE;
+	client->rt_thread_ok = FALSE;
 	client->first_active = TRUE;
 	client->on_shutdown = NULL;
 	client->on_info_shutdown = NULL;
@@ -1413,6 +1414,15 @@ jack_stop_freewheel (jack_client_t* client)
 }
 
 static void
+jack_process_thread_suicide (jack_client_t* client)
+{
+	pthread_mutex_unlock( &client->process_mutex );
+	jack_error ("jack_process_thread suicide");
+
+	pthread_exit (0);
+	/*NOTREACHED*/
+}
+static void
 jack_client_thread_suicide (jack_client_t* client)
 {
 	if (client->on_info_shutdown) {
@@ -1982,12 +1992,12 @@ void jack_cycle_signal(jack_client_t* client, int status)
 	
 	if (jack_wake_next_client (client, client->engine->current_process_chain)) {
 		DEBUG("client cannot wake next, or is dead\n");
-		jack_client_thread_suicide (client);
+		jack_process_thread_suicide (client);
 		/*NOTREACHED*/
 	}
 
 	if (status || client->control->dead || !client->engine->engine_ok) {
-		jack_client_thread_suicide (client);
+		jack_process_thread_suicide (client);
 		/*NOTREACHED*/
 	}
 }
@@ -2026,8 +2036,7 @@ jack_process_thread_aux (void *arg)
 	}
 
 	jack_error( "process thread exiting now... " );
-	pthread_mutex_unlock( &client->process_mutex );
-	jack_client_thread_suicide (client);
+	jack_process_thread_suicide (client);
 }
 
 static void* 
@@ -2046,6 +2055,7 @@ jack_client_thread (void *arg)
 		// is unlocked.
 		pthread_mutex_lock( &client->process_mutex );
 		pthread_mutex_unlock( &client->process_mutex );
+		client->rt_thread_ok = TRUE;
 	}
 
 	// ok... everybody is ready to go. signal main thread.
@@ -2071,7 +2081,7 @@ jack_client_process_thread (void *arg)
 	
 	if (client->control->thread_cb_cbset) {
 		client->thread_cb(client->thread_cb_arg);
-		jack_client_thread_suicide(client);
+		jack_process_thread_suicide(client);
 	} else {
 		jack_process_thread_aux(arg);
 	}
@@ -2229,11 +2239,6 @@ jack_activate (jack_client_t *client)
 {
 	jack_request_t req;
 
-	/* we need to scribble on our stack to ensure that its memory
-	 * pages are actually mapped (more important for mlockall(2)
-	 * usage in jack_start_thread())
-	 */
-
 	if (client->control->type == ClientInternal) {
 
 		pthread_mutex_lock( &client->process_mutex );
@@ -2250,6 +2255,7 @@ jack_activate (jack_client_t *client)
 		}
 		pthread_mutex_lock( &client->process_mutex );
 		pthread_mutex_unlock( &client->process_mutex );
+		client->rt_thread_ok = TRUE;
 
 		goto startit;
 	}
@@ -2348,6 +2354,24 @@ jack_deactivate (jack_client_t *client)
 	return jack_deactivate_aux(client);
 }
 
+void 
+jack_client_shutdown_rt_thread( jack_client_t *client )
+{
+	char c=0;
+	void *status;
+	close( client->graph_wait_fd );
+	client->graph_wait_fd = -1;
+	write( client->process_pipe[1], &c, 1 );
+
+	pthread_mutex_lock( &client->process_mutex );
+	jack_error( "got process mutex." );
+	pthread_cancel (client->process_thread);
+	pthread_cond_signal( &client->process_wakeup );
+	pthread_mutex_unlock( &client->process_mutex );
+	pthread_join (client->process_thread, &status);
+	jack_error( "process thread joined" );
+}
+
 static int
 jack_client_close_aux (jack_client_t *client)
 {
@@ -2373,21 +2397,8 @@ jack_client_close_aux (jack_client_t *client)
 		}
 #else
 		jack_error( "shutdown sequence..." );
-		if (client->control->process_cbset)
-	       	{
-			char c=0;
-			close( client->graph_wait_fd );
-			client->graph_wait_fd = -1;
-			write( client->process_pipe[1], &c, 1 );
-
-			pthread_mutex_lock( &client->process_mutex );
-			jack_error( "got process mutex." );
-			pthread_cancel (client->process_thread);
-			pthread_cond_signal( &client->process_wakeup );
-			pthread_mutex_unlock( &client->process_mutex );
-			pthread_join (client->process_thread, &status);
-			jack_error( "process thread joined" );
-		}
+		if (client->rt_thread_ok)
+			jack_client_shutdown_rt_thread (client);
 	
 #endif
 		/* stop the thread that communicates with the jack

@@ -530,6 +530,8 @@ jack_port_t *jack_port_by_name_int (jack_client_t *client,
 int jack_port_name_equals (jack_port_shared_t* port, const char* target);
 
 int jack_handle_reorder (jack_client_t *client, jack_event_t *event);
+
+void jack_client_shutdown_rt_thread( jack_client_t *client );
 #ifdef __GNUC__
 #  define likely(x)	__builtin_expect((x),1)
 #  define unlikely(x)	__builtin_expect((x),0)

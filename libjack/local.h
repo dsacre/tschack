@@ -37,6 +37,7 @@ struct _jack_client {
     void (*on_info_shutdown)(jack_status_t, const char*, void *arg);
     void *on_info_shutdown_arg;
     char thread_ok : 1;
+    char rt_thread_ok : 1;
     char first_active : 1;
     pthread_t thread_id;
     char name[JACK_CLIENT_NAME_SIZE];
@@ -45,7 +46,6 @@ struct _jack_client {
     /* specific ressources for server/client real-time thread communication */
     mach_port_t clienttask, bp, serverport, replyport;
     trivial_message  message;
-    char rt_thread_ok : 1;
 #endif
     pthread_t process_thread;
     pthread_mutex_t process_mutex;

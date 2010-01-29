@@ -144,6 +144,11 @@ jack_remove_client (jack_engine_t *engine, jack_client_internal_t *client)
 		engine->fifo[client->control->id] = -1;
 	}
 
+	if (client->control->type == ClientInternal) {
+		if (client->private_client->rt_thread_ok)
+			jack_client_shutdown_rt_thread (client->private_client);
+	}
+
 	for (node = engine->clients; node; node = jack_slist_next (node)) {
 		if (((jack_client_internal_t *) node->data)->control->id
 		    == client->control->id) {
