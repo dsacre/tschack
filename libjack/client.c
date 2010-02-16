@@ -586,10 +586,8 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 	JSList *pnode;
 
 	DEBUG ("graph reorder... n=%d\n", event->x.n );
-	jack_error( "reorder for chain %d next chain: %d", setup_chain, client->engine->next_process_chain );
 
 	if (client->graph_wait_fd == -1) {
-		jack_error ("create new graph_wait_fd");
 		snprintf (path, sizeof(path), "%s-%d", client->fifo_prefix, client->control->id);
 		if ((client->graph_wait_fd = open (path, O_RDONLY|O_NONBLOCK)) < 0) {
 			jack_error ("cannot open specified fifo [%s] for reading (%s)",
@@ -647,9 +645,8 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 
 	// now check, if process thread is waiting,
 	if( pthread_mutex_trylock( &client->process_mutex ) ) {
-		jack_error( "process_thread is alive." );
+		// process_thread is alive all good.
 	} else {
-		jack_error( "process_thread was waiting... overriding" );
 		client->chain_override = setup_chain;
 		pthread_cond_signal( &client->process_wakeup );
 		pthread_mutex_unlock( &client->process_mutex );
@@ -1713,10 +1710,8 @@ jack_client_graph_wait( jack_client_t* client )
 			DEBUG ("time to run process()\n");
 			break;
 		} else {
-			jack_error ("poll failed... going to sleep");
 			// now we basically need to wait, until
 			pthread_cond_wait( &client->process_wakeup, &client->process_mutex );
-			jack_error ("wakup");
 		}
 #endif
 	}
