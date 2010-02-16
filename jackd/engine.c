@@ -87,7 +87,7 @@ static int                    jack_port_assign_buffer (jack_engine_t *,
 static jack_port_internal_t *jack_get_port_by_name (jack_engine_t *,
 						    const char *name);
 static int  jack_rechain_graph (jack_engine_t *engine);
-//static void jack_clear_fifos (jack_engine_t *engine);
+static void jack_clear_fifos (jack_engine_t *engine);
 static int  jack_port_do_connect (jack_engine_t *engine,
 				  const char *source_port,
 				  const char *destination_port);
@@ -1809,6 +1809,7 @@ jack_server_thread (void *arg)
 
 			jack_lock_problems (engine);
 
+			jack_clear_fifos( engine );
 			jack_remove_clients (engine, &stop_freewheeling);
 			if (stop_freewheeling) {
 				VERBOSE (engine, "need to stop freewheeling once problems are cleared");
@@ -3953,7 +3954,6 @@ jack_get_fifo_fd (jack_engine_t *engine, unsigned int which_fifo)
 	return engine->fifo[which_fifo];
 }
 
-#if 0
 static void
 jack_clear_fifos (jack_engine_t *engine)
 {
@@ -3977,7 +3977,6 @@ jack_clear_fifos (jack_engine_t *engine)
 		}
 	}
 }
-#endif
 
 static int
 jack_use_driver (jack_engine_t *engine, jack_driver_t *driver)
