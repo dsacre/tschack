@@ -1619,7 +1619,6 @@ jack_server_thread (void *arg)
 
 			jack_lock_problems (engine);
 
-			jack_clear_fifos( engine );
 			jack_remove_clients (engine, &stop_freewheeling);
 			if (stop_freewheeling) {
 				VERBOSE (engine, "need to stop freewheeling once problems are cleared");
@@ -1627,6 +1626,7 @@ jack_server_thread (void *arg)
 
 			engine->problems -= problemsProblemsPROBLEMS;
 			problemsProblemsPROBLEMS = engine->problems;
+			jack_clear_fifos( engine );
 			jack_unlock_problems (engine);
 
 			jack_unlock_graph (engine);
