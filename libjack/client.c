@@ -2017,9 +2017,7 @@ jack_process_thread_aux (void *arg)
 
 			while (1) {
 				DEBUG("client calls process()");
-				int status = (client->process (control->nframes, 
-								client->process_arg) ==
-					      control->nframes);
+				int status = client->process (control->nframes, client->process_arg);
 				client->engine->per_client[control->id].state = Finished;
 				DEBUG("client leaves process(), re-enters wait");
 				if (!jack_thread_wait (client, status)) {
