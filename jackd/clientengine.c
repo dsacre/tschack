@@ -570,6 +570,7 @@ jack_setup_client_control (jack_engine_t *engine, int fd,
 	client->control->active = 0;
 	client->control->dead = FALSE;
 	client->control->timed_out = 0;
+	client->control->nframes = engine->control->buffer_size;
 	client->control->id = jack_get_client_id( engine );
 	strcpy ((char *) client->control->name, name);
 	client->subgraph_start_fd = -1;
