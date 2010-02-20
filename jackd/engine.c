@@ -699,7 +699,7 @@ static int
 jack_engine_wait_graph (jack_engine_t *engine)
 {
 	int status = 0;
-	char c = 0;
+	char c[16];
 	struct pollfd pfd[1];
 	int poll_timeout;
 	jack_time_t poll_timeout_usecs;
@@ -799,9 +799,8 @@ jack_engine_wait_graph (jack_engine_t *engine)
 
 		DEBUG ("reading byte from subgraph_wait_fd==%d chain=%d",
 		       engine->graph_wait_fd, curr_chain);
-
-		if (read (engine->graph_wait_fd, &c, sizeof(c))
-		    != sizeof (c)) {
+		int rb = read (engine->graph_wait_fd, c, sizeof(c));
+		if (rb < 1) {
 			jack_error ("pp: cannot clean up byte from graph wait "
 				    "fd (%s)", strerror (errno));
 			return -1;	/* will stop the loop */

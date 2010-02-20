@@ -1866,8 +1866,9 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 	}
 
 	if (pret > 0 && (pfds[0].revents & POLLIN)) {
-		if (read (client->graph_wait_fd, &c, sizeof (c))
-		    != sizeof (c)) {
+		char cleanup_buf[16];
+		if (read (client->graph_wait_fd, cleanup_buf, sizeof (cleanup_buf))
+		    < 1) {
 			jack_error ("cannot complete execution of the "
 				"processing graph (%s)", strerror(errno));
 			return -1;
