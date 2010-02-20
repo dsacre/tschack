@@ -800,7 +800,6 @@ jack_engine_wait_graph (jack_engine_t *engine)
 		DEBUG ("reading byte from subgraph_wait_fd==%d chain=%d",
 		       engine->graph_wait_fd, curr_chain);
 		int rb = read (engine->graph_wait_fd, c, sizeof(c));
-		jack_error( "reading... %d", rb );
 		if (rb < 1) {
 			jack_error ("pp: cannot clean up byte from graph wait "
 				    "fd (%s)", strerror (errno));
