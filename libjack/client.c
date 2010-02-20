@@ -1788,6 +1788,8 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 					client->engine->per_client[dst_id].state = Triggered;
 					client->engine->per_client[dst_id].triggered_at = jack_get_microseconds();
 
+					jack_error( "set client %d to triggered", dst_id );
+
 				}
 			}
 		}
@@ -1801,6 +1803,7 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 	    // set the client to triggered.
 	    client->engine->per_client[0].state = Triggered;
 	    client->engine->per_client[0].triggered_at = jack_get_microseconds();
+	    jack_error( "set client %d to triggered", 0 );
 	  }
 	}
 
@@ -1820,6 +1823,7 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 				client->engine->per_client[i].state = Signaled;
 				client->engine->per_client[i].signalled_at = jack_get_microseconds();
 
+				jack_error( "signal client %d", i );
 				if (write (client->graph_next_fds_array[i], &c, sizeof (c))
 						!= sizeof (c)) {
 					DEBUG("cannot write byte to fd %d for id", 
