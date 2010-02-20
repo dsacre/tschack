@@ -62,8 +62,6 @@
 #include <sysdeps/pThreadUtilities.h>
 #endif
 
-static pthread_mutex_t client_lock;
-static pthread_cond_t  client_ready;
 
 static int
 jack_client_close_aux (jack_client_t *client);
@@ -2052,11 +2050,11 @@ jack_client_thread (void *arg)
 	}
 
 	// ok... everybody is ready to go. signal main thread.
-	pthread_mutex_lock (&client_lock);
+	pthread_mutex_lock (&client->client_mutex);
 	client->thread_ok = TRUE;
 	client->thread_id = pthread_self();
-	pthread_cond_signal (&client_ready);
-	pthread_mutex_unlock (&client_lock);
+	pthread_cond_signal (&client->client_ready);
+	pthread_mutex_unlock (&client->client_mutex);
 
 	client->control->pid = getpid();
 	client->control->pgrp = getpgrp();
@@ -2295,18 +2293,18 @@ jack_activate (jack_client_t *client)
 
 	if (client->first_active) {
 
-		pthread_mutex_init (&client_lock, NULL);
-		pthread_cond_init (&client_ready, NULL);
+		pthread_mutex_init (&client->client_mutex, NULL);
+		pthread_cond_init (&client->client_ready, NULL);
 		
-		pthread_mutex_lock (&client_lock);
+		pthread_mutex_lock (&client->client_mutex);
 
 		if (jack_start_thread (client)) {
-			pthread_mutex_unlock (&client_lock);
+			pthread_mutex_unlock (&client->client_mutex);
 			return -1;
 		}
 
-		pthread_cond_wait (&client_ready, &client_lock);
-		pthread_mutex_unlock (&client_lock);
+		pthread_cond_wait (&client->client_ready, &client->client_mutex);
+		pthread_mutex_unlock (&client->client_mutex);
 
 		if (!client->thread_ok) {
 			jack_error ("could not start client thread");
