@@ -1764,7 +1764,6 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 		  continue;
 
 		DEBUG( "looking at port %s", port->shared->name );
-		pthread_mutex_lock( &port->connection_lock );
 		for (cnode = port->connections_rt[curr_chain]; cnode; cnode = jack_slist_next (cnode))
 		{
 			
@@ -1792,7 +1791,6 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 				}
 			}
 		}
-		pthread_mutex_unlock( &port->connection_lock );
 	}
 
 	if( output_connections == 0 ) {
