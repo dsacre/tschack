@@ -50,6 +50,8 @@ struct _jack_client {
     pthread_t process_thread;
     pthread_mutex_t process_mutex;
     pthread_cond_t  process_wakeup;
+    pthread_mutex_t client_mutex;
+    pthread_cond_t  client_ready;
 
     /* callbacks 
      */
