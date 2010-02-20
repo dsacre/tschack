@@ -1914,7 +1914,10 @@ jack_thread_wait (jack_client_t* client, int status)
 	}
 
 	if (status || client->control->dead || !client->engine->engine_ok) {
-		jack_error("status.... exit\n");
+		if( client->control->dead ) 
+		  jack_error( "we are dead :(" );
+		else
+		  jack_error("status.... exit\n");
 		return 0;
 	}
 	
