@@ -2910,6 +2910,8 @@ jack_rechain_graph (jack_engine_t *engine)
 	for (node = engine->process_graph_list[setup_chain]; node; node = jack_slist_next(node)) 
 	{
 		client = (jack_client_internal_t *) node->data;
+		if( client->control->id == 0 )
+		  continue;
 		// driver refcount might change after this, we need to delay this check.
 		if( engine->client_activation_counts_init[setup_chain][client->control->id] == 0 )
 		{
