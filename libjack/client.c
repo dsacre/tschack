@@ -110,6 +110,10 @@ init_cpu ()
 
 #endif /* USE_DYNSIMD */
 
+#ifdef USE_MLOCK
+static int mlocked_already = 0;
+#endif
+
 char *jack_tmpdir = DEFAULT_TMP_DIR;
 
 static int
@@ -2183,19 +2187,22 @@ jack_start_thread (jack_client_t *client)
  	if (client->engine->real_time) {
 
 #ifdef USE_MLOCK
-		if (client->engine->do_mlock
-		    && (mlockall (MCL_CURRENT | MCL_FUTURE) != 0)) {
-			jack_error ("cannot lock down memory for RT thread "
-				    "(%s)", strerror (errno));
-			 
+		if (client->engine->do_mlock && (mlocked_already == 0))
+		{
+			mlocked_already = 1;
+			if (mlockall (MCL_CURRENT | MCL_FUTURE) != 0) {
+				jack_error ("cannot lock down memory for RT thread "
+						"(%s)", strerror (errno));
+
 #ifdef ENSURE_MLOCK
-			 return -1;
+				return -1;
 #endif /* ENSURE_MLOCK */
-		 }
-		 
-		 if (client->engine->do_munlock) {
-			 cleanup_mlock ();
-		 }
+			}
+
+			if (client->engine->do_munlock) {
+				cleanup_mlock ();
+			}
+		}
 #endif /* USE_MLOCK */
 	}
 
