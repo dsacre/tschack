@@ -1627,7 +1627,7 @@ jack_client_graph_wait( jack_client_t* client )
 #endif
 
 		if (client->graph_wait_fd >= 0 ) { 
-			if (poll (& (client->pollfd[PROCESS_PIPE_INDEX]), 2, 1000) < 0) {
+			if (poll (& (client->pollfd[PROCESS_PIPE_INDEX]), 2, -1) < 0) {
 				if (errno == EINTR) {
 					continue;
 				}
