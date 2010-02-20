@@ -2316,7 +2316,6 @@ jack_run_one_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 	} else {
 		DEBUG ("engine process cycle failed");
 		jack_check_client_status (engine);
-		
 	}
 
 	jack_engine_post_process (engine);
@@ -2912,10 +2911,12 @@ jack_rechain_graph (jack_engine_t *engine)
 		client = (jack_client_internal_t *) node->data;
 		if( client->control->id == 0 )
 		  continue;
+		VERBOSE( engine, "checking client %s activation_count = %d", client->control->name, engine->client_activation_counts_init[setup_chain][client->control->id] );
 		// driver refcount might change after this, we need to delay this check.
 		if( engine->client_activation_counts_init[setup_chain][client->control->id] == 0 )
 		{
 			// this client needs to be triggered by jackd.
+			VERBOSE( engine, "added..." );
 			engine->server_wakeup_list[setup_chain] = 
 				jack_slist_append( engine->server_wakeup_list[setup_chain], client );
 		}
