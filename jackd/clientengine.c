@@ -219,6 +219,10 @@ jack_check_clients (jack_engine_t* engine, int with_timeout_check)
 				 client->control->name,
 				 client->control->awake_at,
 				 client->control->finished_at);
+			jack_per_client_ctl_t *pcl = & (engine->control->per_client[client->control->id]);
+			VERBOSE (engine, "triggered at %" PRIu64 " signaled at %" PRIu64, 
+				 pcl->triggered_at,
+				 pcl->signalled_at );
 			
 			if (client->control->awake_at > 0) {
 				if (client->control->finished_at == 0) {
@@ -875,6 +879,7 @@ jack_client_activate (jack_engine_t *engine, jack_client_id_t id)
 		    == id) {
 		       
 			client = (jack_client_internal_t *) node->data;
+			VERBOSE( engine, "activating client %s", client->control->name );
 			client->control->active = TRUE;
 
 			jack_transport_activate(engine, client);
