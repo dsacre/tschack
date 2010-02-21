@@ -705,7 +705,7 @@ jack_engine_wait_graph (jack_engine_t *engine)
 	jack_time_t poll_timeout_usecs;
 	jack_time_t now, then;
 	int pollret;
-	int curr_chain = engine->control->current_process_chain;
+	//int curr_chain = engine->control->current_process_chain;
 
 	then = jack_get_microseconds ();
 
@@ -2806,7 +2806,7 @@ jack_rechain_graph (jack_engine_t *engine)
 	int err = 0;
 	jack_client_internal_t *client, *subgraph_client;
 	jack_event_t event;
-	int upstream_is_jackd;
+	//int upstream_is_jackd;
 	int setup_chain = (engine->control->current_process_chain+1)&1;
 	int curr_chain = engine->control->current_process_chain;
 
@@ -2905,7 +2905,7 @@ jack_rechain_graph (jack_engine_t *engine)
 
 			} else {
 				event.x.n = client->execution_order;
-				event.y.n = upstream_is_jackd;
+				event.y.n = 0;
 				jack_deliver_event (engine, client, &event);
 				n++;
 			}
@@ -3901,6 +3901,7 @@ jack_port_do_register (jack_engine_t *engine, jack_request_t *req, int internal)
 	size_t len;
 
 	for (i = 0; i < engine->control->n_port_types; ++i) {
+		jack_error( "porttype= %s", engine->control->port_types[i].type_name );
 		if (strcmp (req->x.port_info.type,
 			    engine->control->port_types[i].type_name) == 0) {
 			break;
