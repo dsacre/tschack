@@ -816,19 +816,24 @@ jack_engine_process (jack_engine_t *engine, jack_nframes_t nframes)
 	jack_client_internal_t *client;
 	JSList *node, *pnode;
 	int curr_chain = engine->control->current_process_chain; 
+	int i;
 
 	engine->process_errors = 0;
 	engine->watchdog_check = 1;
 
-	for (node = engine->process_graph_list[curr_chain]; node; node = jack_slist_next (node)) {
-		client = (jack_client_internal_t *) node->data;
-		jack_client_control_t *ctl = client->control;
-		jack_per_client_ctl_t *pcl = & (engine->control->per_client[client->control->id]);
-
+	for (i=0; i<JACK_MAX_CLIENTS; i++ ) {
+		jack_per_client_ctl_t *pcl = & (engine->control->per_client[i]);
 		pcl->state = NotTriggered;
 		pcl->signal_token = 1;
 		pcl->signalled_at = 0;
 		pcl->triggered_at = 0;
+	}
+
+	for (node = engine->process_graph_list[curr_chain]; node; node = jack_slist_next (node)) {
+		client = (jack_client_internal_t *) node->data;
+		jack_client_control_t *ctl = client->control;
+		jack_per_client_ctl_t *pcl = & (engine->control->per_client[ctl->id]);
+
 		ctl->nframes = nframes;
 		ctl->timed_out = 0;
 		ctl->awake_at = 0;
