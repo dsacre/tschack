@@ -265,7 +265,7 @@ jack_port_register (jack_client_t *client,
 		return NULL;
 	}
 
-	client->ports = jack_slist_prepend (client->ports, port);
+	client->ports_locked = jack_slist_prepend (client->ports_locked, port);
 
 	return port;
 }
@@ -423,7 +423,7 @@ jack_port_by_id_int (const jack_client_t *client, jack_port_id_t id, int* free)
 {
 	JSList *node;
 
-	for (node = client->ports; node; node = jack_slist_next (node)) {
+	for (node = client->ports_locked; node; node = jack_slist_next (node)) {
 		if (((jack_port_t *) node->data)->shared->id == id) {
 			*free = FALSE;
 			return (jack_port_t *) node->data;

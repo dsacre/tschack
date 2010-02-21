@@ -2585,12 +2585,15 @@ jack_driver_do_reorder( jack_client_t *client, jack_event_t *event )
   JSList *pnode;
   int setup_chain = (client->engine->current_process_chain+1)&1;
 
-  for( pnode=client->ports; pnode; pnode=jack_slist_next(pnode) ) {
+  //jack_slist_free( client->ports_rt[setup_chain] );
+  //client->ports_rt[setup_chain] = NULL;
+
+  for( pnode=client->ports_locked; pnode; pnode=jack_slist_next(pnode) ) {
     jack_port_t *port = pnode->data;
 
     jack_slist_free( port->connections_rt[setup_chain] );
     port->connections_rt[setup_chain] = jack_slist_copy( port->connections_locked );
-
+    //client->ports_rt[setup_chain] = jack_slist_append( client->ports_rt[setup_chain], port );
   }
 }
 int

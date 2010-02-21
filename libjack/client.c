@@ -360,7 +360,9 @@ jack_client_alloc ()
 
 	client->chain_override = -1;
 
-	client->ports = NULL;
+	client->ports_locked = NULL;
+	client->ports_rt[0] = NULL;
+	client->ports_rt[1] = NULL;
 	client->ports_ext = NULL;
 	client->engine = NULL;
 	client->control = NULL;
@@ -438,7 +440,7 @@ jack_client_fix_port_buffers (jack_client_t *client)
 	   buffer on the next call (if there is one).
 	*/
 
-	for (node = client->ports; node; node = jack_slist_next (node)) {
+	for (node = client->ports_locked; node; node = jack_slist_next (node)) {
 		port = (jack_port_t *) node->data;
 
 		if (port->shared->flags & JackPortIsInput) {
@@ -600,17 +602,20 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 	} 
 
 	// now check who we feed, and make sure all fds are open.
-	//
-	// TODO: double buffer connections.
 
-	for (pnode = client->ports; pnode; pnode = jack_slist_next (pnode)) {
+	jack_slist_free( client->ports_rt[setup_chain] );
+	client->ports_rt[setup_chain] = NULL;
+
+	for (pnode = client->ports_locked; pnode; pnode = jack_slist_next (pnode)) {
 		jack_port_t *port = (jack_port_t *) pnode->data;
 
 		pthread_mutex_lock( &port->connection_lock );
+
 		jack_slist_free( port->connections_rt[setup_chain] );
 		port->connections_rt[setup_chain] = jack_slist_copy( port->connections_locked );
 
 		pthread_mutex_unlock( &port->connection_lock );
+		client->ports_rt[setup_chain] = jack_slist_append( client->ports_rt[setup_chain], port );
 	}
 
 	for (i = 0; i<JACK_MAX_CLIENTS; i++)
@@ -1614,7 +1619,7 @@ jack_client_graph_wait( jack_client_t* client )
   // it will never change.
 
 	jack_client_control_t *control = client->control;
-	int curr_chain;
+	int curr_chain=0;
 
 	DEBUG ("client polling on graph_wait_fd" );
 	
@@ -1758,7 +1763,7 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 
 	// TODO: double buffer connections.
 
-	for (pnode = client->ports; pnode; pnode = jack_slist_next (pnode)) {
+	for (pnode = client->ports_rt[curr_chain]; pnode; pnode = jack_slist_next (pnode)) {
 		jack_port_t *port = (jack_port_t *) pnode->data;
 		if (port->shared->flags & JackPortIsInput)
 		  continue;
@@ -1822,11 +1827,11 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 
 				if (write (client->graph_next_fds_array[i], &c, sizeof (c))
 						!= sizeof (c)) {
-					DEBUG("cannot write byte to fd %d for id", 
+					DEBUG("cannot write byte to fd %d for id %d", 
 							client->graph_next_fds_array[i], i );
 					jack_error ("cannot continue execution of the "
-							"processing graph (%s)",
-							strerror(errno));
+							"processing graph (%s) fd = %d id = %d",
+							strerror(errno), client->graph_next_fds_array[i], i);
 					return -1;
 				}
 				still_have_token = 0;
@@ -2450,10 +2455,13 @@ jack_client_close_aux (jack_client_t *client)
 
 	}
 
-	for (node = client->ports; node; node = jack_slist_next (node)) {
+	for (node = client->ports_locked; node; node = jack_slist_next (node)) {
 		free (node->data);
 	}
-	jack_slist_free (client->ports);
+	jack_slist_free (client->ports_locked);
+	jack_slist_free (client->ports_rt[0]);
+	jack_slist_free (client->ports_rt[1]);
+
 	for (node = client->ports_ext; node; node = jack_slist_next (node)) {
 		free (node->data);
 	}

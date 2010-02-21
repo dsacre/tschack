@@ -27,7 +27,8 @@ struct _jack_client {
     jack_port_type_id_t n_port_types;
     jack_shm_info_t*    port_segment;
 
-    JSList *ports;
+    JSList *ports_locked;
+    JSList *ports_rt[2];
     JSList *ports_ext;
 
     pthread_t thread;
