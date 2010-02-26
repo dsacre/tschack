@@ -696,10 +696,26 @@ jack_engine_trigger_client (jack_engine_t *engine, jack_client_internal_t *clien
 }
 
 static int
+jack_engine_cleanup_graph_wait (jack_engine_t *engine, int min_tokens)
+{
+	int rb;
+	char c[16];
+
+	DEBUG ("reading byte from subgraph_wait_fd==%d chain=%d",
+			engine->graph_wait_fd);
+	rb = read (engine->graph_wait_fd, c, sizeof(c));
+	if (min_tokens && (rb < min_tokens)) {
+		jack_error ("pp: cannot clean up byte from graph wait "
+				"fd (%s)", strerror (errno));
+		return -1;	/* will stop the loop */
+	}
+	return 0;
+}
+
+static int
 jack_engine_wait_graph (jack_engine_t *engine)
 {
 	int status = 0;
-	char c[16];
 	struct pollfd pfd[1];
 	int poll_timeout;
 	jack_time_t poll_timeout_usecs;
@@ -796,14 +812,8 @@ jack_engine_wait_graph (jack_engine_t *engine)
 		return -1;		/* will stop the loop */
 
 	} else {
-
-		DEBUG ("reading byte from subgraph_wait_fd==%d chain=%d",
-		       engine->graph_wait_fd, curr_chain);
-		int rb = read (engine->graph_wait_fd, c, sizeof(c));
-		if (rb < 1) {
-			jack_error ("pp: cannot clean up byte from graph wait "
-				    "fd (%s)", strerror (errno));
-			return -1;	/* will stop the loop */
+		if (jack_engine_cleanup_graph_wait (engine, 1)) {
+			return -1;
 		}
 	}
 
@@ -820,6 +830,9 @@ jack_engine_process (jack_engine_t *engine, jack_nframes_t nframes)
 
 	engine->process_errors = 0;
 	engine->watchdog_check = 1;
+
+	if( engine->server_wakeup_list[curr_chain] ) 
+		jack_engine_cleanup_graph_wait (engine, 0);
 
 	for (i=0; i<JACK_MAX_CLIENTS; i++ ) {
 		jack_per_client_ctl_t *pcl = & (engine->control->per_client[i]);
