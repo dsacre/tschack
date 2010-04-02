@@ -123,6 +123,7 @@ void
 jack_remove_client (jack_engine_t *engine, jack_client_internal_t *client)
 {
 	JSList *node;
+	jack_client_id_t finalizer=0;
 
 	/* caller must write-hold the client lock */
 
@@ -132,6 +133,20 @@ jack_remove_client (jack_engine_t *engine, jack_client_internal_t *client)
 
 	if (!client->control->dead) {
 		jack_zombify_client (engine, client);
+	}
+
+	if (client->session_reply_pending) {
+		engine->session_pending_replies -= 1;
+
+		if (engine->session_pending_replies == 0) {
+			if (write (engine->session_reply_fd, &finalizer, sizeof (finalizer))
+					< (ssize_t) sizeof (finalizer)) {
+				jack_error ("cannot write SessionNotify result "
+						"to client via fd = %d (%s)", 
+						engine->session_reply_fd, strerror (errno));
+			}
+			engine->session_reply_fd = -1;
+		}
 	}
 
 	if (client->control->type == ClientExternal) {
@@ -372,7 +387,7 @@ jack_client_unload (jack_client_internal_t *client)
 	}
 }
 
-static jack_client_internal_t *
+jack_client_internal_t *
 jack_client_by_name (jack_engine_t *engine, const char *name)
 {
 	jack_client_internal_t *client = NULL;
@@ -436,6 +451,17 @@ jack_client_internal_by_id (jack_engine_t *engine, jack_client_id_t id)
 	return client;
 }
 
+int
+jack_client_name_reserved( jack_engine_t *engine, const char *name )
+{
+	JSList *node;
+        for (node = engine->reserved_client_names; node; node = jack_slist_next (node)) {
+		jack_reserved_name_t *reservation = (jack_reserved_name_t *) node->data;
+		if( !strcmp( reservation->name, name ) )
+			return 1;
+	}
+	return 0;
+}
 
 /* generate a unique client name
  *
@@ -459,7 +485,7 @@ jack_generate_unique_name (jack_engine_t *engine, char *name)
 	name[tens] = '0';
 	name[ones] = '1';
 	name[length] = '\0';
-	while (jack_client_by_name (engine, name)) {
+	while (jack_client_by_name (engine, name) || jack_client_name_reserved( engine, name )) {
 		if (name[ones] == '9') {
 			if (name[tens] == '9') {
 				jack_error ("client %s has 99 extra"
@@ -487,7 +513,7 @@ jack_client_name_invalid (jack_engine_t *engine, char *name,
 	 * startup.  There are no other clients at that point, anyway.
 	 */
 
-	if (jack_client_by_name (engine, name)) {
+	if (jack_client_by_name (engine, name) || jack_client_name_reserved(engine, name )) {
 
 		*status |= JackNameNotUnique;
 
@@ -525,7 +551,7 @@ jack_get_client_id( jack_engine_t *engine )
  * internal and external clients. */
 static jack_client_internal_t *
 jack_setup_client_control (jack_engine_t *engine, int fd,
-			   ClientType type, const char *name)
+			   ClientType type, const char *name, jack_client_id_t uuid)
 {
 	jack_client_internal_t *client;
 
@@ -576,8 +602,11 @@ jack_setup_client_control (jack_engine_t *engine, int fd,
 	client->control->timed_out = 0;
 	client->control->nframes = engine->control->buffer_size;
 	client->control->id = jack_get_client_id( engine );
+	client->control->uid = uuid;
 	strcpy ((char *) client->control->name, name);
 	client->subgraph_start_fd = -1;
+
+	client->session_reply_pending = FALSE;
 
 	client->control->process_cbset = FALSE;
 	client->control->bufsize_cbset = FALSE;
@@ -589,6 +618,7 @@ jack_setup_client_control (jack_engine_t *engine, int fd,
 	client->control->client_register_cbset = FALSE;
 	client->control->thread_cb_cbset = FALSE;
 	client->control->thread_init_cbset = FALSE;
+	client->control->session_cbset = FALSE;
 
 // XXX: hmm... this shouldnt be necessary. but having em uninit sucks.
 #if 0
@@ -625,9 +655,23 @@ jack_setup_client_control (jack_engine_t *engine, int fd,
 	return client;
 }
 
+static void
+jack_ensure_uuid_unique (jack_engine_t *engine, jack_client_id_t uuid)
+{
+	JSList *node;
+
+	jack_lock_graph (engine);
+	for (node=engine->clients; node; node=jack_slist_next (node)) {
+		jack_client_internal_t *client = (jack_client_internal_t *) node->data;
+		if (client->control->uid == uuid)
+			client->control->uid = 0;
+	}
+	jack_unlock_graph (engine);
+}
+
 /* set up all types of clients */
 static jack_client_internal_t *
-setup_client (jack_engine_t *engine, ClientType type, char *name,
+setup_client (jack_engine_t *engine, ClientType type, char *name, jack_client_id_t uuid,
 	      jack_options_t options, jack_status_t *status, int client_fd,
 	      const char *object_path, const char *object_data)
 {
@@ -638,9 +682,12 @@ setup_client (jack_engine_t *engine, ClientType type, char *name,
 	if (jack_client_name_invalid (engine, name, options, status))
 		return NULL;
 
+	if (uuid != 0)
+		jack_ensure_uuid_unique (engine, uuid);
+
 	/* create a client struct for this name */
 	if ((client = jack_setup_client_control (engine, client_fd,
-						 type, name)) == NULL) {
+						 type, name, uuid )) == NULL) {
 		*status |= (JackFailure|JackInitFailure);
 		jack_error ("cannot create new client object");
 		return NULL;
@@ -734,7 +781,7 @@ jack_create_driver_client (jack_engine_t *engine, char *name)
 	snprintf (req.name, sizeof (req.name), "%s", name);
 
 	pthread_mutex_lock (&engine->request_lock);
-	client = setup_client (engine, ClientDriver, name, JackUseExactName,
+	client = setup_client (engine, ClientDriver, name, 0, JackUseExactName,
 			       &status, -1, NULL, NULL);
 	pthread_mutex_unlock (&engine->request_lock);
 
@@ -764,6 +811,22 @@ handle_unload_client (jack_engine_t *engine, jack_client_id_t id)
 	return status;
 }
 
+static char *
+jack_get_reserved_name( jack_engine_t *engine, jack_client_id_t uuid )
+{
+	JSList *node;
+        for (node = engine->reserved_client_names; node; node = jack_slist_next (node)) {
+		jack_reserved_name_t *reservation = (jack_reserved_name_t *) node->data;
+		if( reservation->uuid== uuid ) {
+			char *retval = strdup( reservation->name );
+			free( reservation );
+			engine->reserved_client_names = 
+				jack_slist_remove( engine->reserved_client_names, reservation );
+			return retval;
+		}
+	}
+	return 0;
+}
 int
 jack_client_create (jack_engine_t *engine, int client_fd)
 {
@@ -811,7 +874,14 @@ jack_client_create (jack_engine_t *engine, int client_fd)
 	}
 	
 	pthread_mutex_lock (&engine->request_lock);
-	client = setup_client (engine, req.type, req.name,
+	if( req.uuid ) {
+		char *res_name = jack_get_reserved_name( engine, req.uuid );
+		if( res_name ) {
+			snprintf( req.name, sizeof(req.name), "%s", res_name );
+			free(res_name);
+		}
+	}
+	client = setup_client (engine, req.type, req.name, req.uuid,
 			       req.options, &res.status, client_fd,
 			       req.object_path, req.object_data);
 	pthread_mutex_unlock (&engine->request_lock);
@@ -867,7 +937,7 @@ int
 jack_client_activate (jack_engine_t *engine, jack_client_id_t id)
 {
 	jack_client_internal_t *client;
-	JSList *node;
+	JSList *node, *node2;
 	int ret = -1;
 	//int setup_chain = (engine->control->current_process_chain+1)&1;
 
@@ -886,10 +956,17 @@ jack_client_activate (jack_engine_t *engine, jack_client_id_t id)
 
 			jack_sort_graph (engine);
 
+			// send delayed notifications for ports.
+			for (node2 = client->ports; node2; node2 = jack_slist_next (node2)) {
+				jack_port_internal_t *port = (jack_port_internal_t *) node2->data;
+				jack_port_registration_notify (engine, port->shared->id, TRUE);
+			}
+
 			ret = 0;
 			break;
 		}
 	}
+
 
 	jack_unlock_graph (engine);
 	return ret;
@@ -1040,7 +1117,7 @@ jack_intclient_load_request (jack_engine_t *engine, jack_request_t *req)
 		 req->x.intclient.path, req->x.intclient.init,
 		 req->x.intclient.options);
 
-	client = setup_client (engine, ClientInternal, req->x.intclient.name,
+	client = setup_client (engine, ClientInternal, req->x.intclient.name, 0,
 			       req->x.intclient.options, &status, -1,
 			       req->x.intclient.path, req->x.intclient.init);
 

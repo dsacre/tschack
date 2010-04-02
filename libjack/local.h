@@ -42,6 +42,7 @@ struct _jack_client {
     char first_active : 1;
     pthread_t thread_id;
     char name[JACK_CLIENT_NAME_SIZE];
+    int	 session_cb_immediate_reply;
 
 #ifdef JACK_USE_MACH_THREADS
     /* specific ressources for server/client real-time thread communication */
@@ -80,8 +81,10 @@ struct _jack_client {
     void *freewheel_arg;
     JackClientRegistrationCallback client_register;	
     void *client_register_arg;
-	JackThreadCallback thread_cb;	
+    JackThreadCallback thread_cb;	
     void *thread_cb_arg;
+    JackSessionCallback session_cb;	
+    void *session_cb_arg;
 
     /* external clients: set by libjack
      * internal clients: set by engine */
