@@ -140,6 +140,7 @@ struct _jack_engine {
     int		    jobs;
     volatile int    problems;
     volatile int    pending_chain;
+    volatile int    new_clients_allowed;    
 
     /* these lists are protected by `client_lock' */
     JSList	   *clients;

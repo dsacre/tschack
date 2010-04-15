@@ -103,6 +103,58 @@ jack_client_do_deactivate (jack_engine_t *engine,
 	return 0;
 }
 
+static int
+jack_load_client (jack_engine_t *engine, jack_client_internal_t *client,
+		  const char *so_name)
+{
+	const char *errstr;
+	char path_to_so[PATH_MAX+1];
+
+	snprintf (path_to_so, sizeof (path_to_so), ADDON_DIR "/%s.so", so_name);
+	client->handle = dlopen (path_to_so, RTLD_NOW|RTLD_GLOBAL);
+	
+	if (client->handle == 0) {
+		if ((errstr = dlerror ()) != 0) {
+			jack_error ("%s", errstr);
+		} else {
+			jack_error ("bizarre error loading %s", so_name);
+		}
+		return -1;
+	}
+
+	client->initialize = dlsym (client->handle, "jack_initialize");
+
+	if ((errstr = dlerror ()) != 0) {
+		jack_error ("%s has no initialize() function\n", so_name);
+		dlclose (client->handle);
+		client->handle = 0;
+		return -1;
+	}
+
+	client->finish = (void (*)(void *)) dlsym (client->handle,
+						   "jack_finish");
+	
+	if ((errstr = dlerror ()) != 0) {
+		jack_error ("%s has no finish() function", so_name);
+		dlclose (client->handle);
+		client->handle = 0;
+		return -1;
+	}
+
+	return 0;
+}
+
+static void
+jack_client_unload (jack_client_internal_t *client)
+{
+	if (client->handle) {
+		if (client->finish) {
+			client->finish (client->private_client->process_arg);
+		}
+		dlclose (client->handle);
+	}
+}
+
 static void
 jack_zombify_client (jack_engine_t *engine, jack_client_internal_t *client)
 {
@@ -128,6 +180,12 @@ jack_remove_client (jack_engine_t *engine, jack_client_internal_t *client)
 	/* caller must write-hold the client lock */
 
 	VERBOSE (engine, "removing client \"%s\"", client->control->name);
+
+        if (client->control->type == ClientInternal) {
+                /* unload it while its still a regular client */
+
+		jack_client_unload (client);
+        }
 
 	/* if its not already a zombie, make it so */
 
@@ -162,7 +220,7 @@ jack_remove_client (jack_engine_t *engine, jack_client_internal_t *client)
 	if (client->control->type == ClientInternal) {
 		if (client->private_client->rt_thread_ok)
 			jack_client_shutdown_rt_thread (client->private_client);
-	}
+	} 
 
 	for (node = engine->clients; node; node = jack_slist_next (node)) {
 		if (((jack_client_internal_t *) node->data)->control->id
@@ -180,11 +238,17 @@ jack_remove_client (jack_engine_t *engine, jack_client_internal_t *client)
 
 	if (engine->temporary && (jack_slist_length(engine->clients) <= 1)) {
 		if (engine->wait_pid >= 0) {
+                        /* block new clients from being created
+                           after we release the lock.
+                        */
+                        engine->new_clients_allowed = 0;
 			/* tell the waiter we're done
 			   to initiate a normal shutdown.
 			*/
 			VERBOSE (engine, "Kill wait pid to stop");
 			kill (engine->wait_pid, SIGUSR2);
+                        /* unlock the graph so that the server thread can finish */
+                        jack_unlock_graph (engine);                        
 			sleep (-1);
 		} else {
 			exit (0);
@@ -333,58 +397,6 @@ jack_remove_clients (jack_engine_t* engine, int* exit_freewheeling_when_done)
 	jack_engine_reset_rolling_usecs (engine);
 
 	VERBOSE (engine, "-- Removing failed clients ...");
-}
-
-static int
-jack_load_client (jack_engine_t *engine, jack_client_internal_t *client,
-		  const char *so_name)
-{
-	const char *errstr;
-	char path_to_so[PATH_MAX+1];
-
-	snprintf (path_to_so, sizeof (path_to_so), ADDON_DIR "/%s.so", so_name);
-	client->handle = dlopen (path_to_so, RTLD_NOW|RTLD_GLOBAL);
-	
-	if (client->handle == 0) {
-		if ((errstr = dlerror ()) != 0) {
-			jack_error ("%s", errstr);
-		} else {
-			jack_error ("bizarre error loading %s", so_name);
-		}
-		return -1;
-	}
-
-	client->initialize = dlsym (client->handle, "jack_initialize");
-
-	if ((errstr = dlerror ()) != 0) {
-		jack_error ("%s has no initialize() function\n", so_name);
-		dlclose (client->handle);
-		client->handle = 0;
-		return -1;
-	}
-
-	client->finish = (void (*)(void *)) dlsym (client->handle,
-						   "jack_finish");
-	
-	if ((errstr = dlerror ()) != 0) {
-		jack_error ("%s has no finish() function", so_name);
-		dlclose (client->handle);
-		client->handle = 0;
-		return -1;
-	}
-
-	return 0;
-}
-
-static void
-jack_client_unload (jack_client_internal_t *client)
-{
-	if (client->handle) {
-		if (client->finish) {
-			client->finish (client->private_client->process_arg);
-		}
-		dlclose (client->handle);
-	}
 }
 
 jack_client_internal_t *
@@ -1072,12 +1084,11 @@ jack_client_delete (jack_engine_t *engine, jack_client_internal_t *client)
 
 	if (jack_client_is_internal (client)) {
 
-		jack_client_unload (client);
 		free (client->private_client);
 		free ((void *) client->control);
 
-	} else {
-		
+        } else {
+
 		/* release the client segment, mark it for
 		   destruction, and free up the shm registry
 		   information so that it can be reused.
@@ -1085,11 +1096,12 @@ jack_client_delete (jack_engine_t *engine, jack_client_internal_t *client)
 
 		jack_release_shm (&client->control_shm);
 		jack_destroy_shm (&client->control_shm);
-	}
+        }
 
 	engine->control->per_client[id].activation_count = -1;
 
-	free (client);
+        free (client);
+
 }
 
 void
