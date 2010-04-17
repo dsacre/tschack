@@ -743,8 +743,8 @@ jack_engine_wait_graph (jack_engine_t *engine)
 	pfd[0].fd = engine->graph_wait_fd;
 	pfd[0].events = POLLERR|POLLIN|POLLHUP|POLLNVAL;
 
-	DEBUG ("waiting on fd==%d chain==%d for process() subgraph to finish (timeout = %d, period_usecs = %d)",
-	       engine->graph_wait_fd, curr_chain, poll_timeout, engine->driver->period_usecs);
+	DEBUG ("waiting on fd==%d for process() subgraph to finish (timeout = %d, period_usecs = %d)",
+	       engine->graph_wait_fd, poll_timeout, engine->driver->period_usecs);
 
 	if ((pollret = poll (pfd, 1, poll_timeout)) < 0) {
 		jack_error ("poll on subgraph processing failed (%s)",
