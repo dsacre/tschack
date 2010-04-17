@@ -2228,7 +2228,7 @@ jack_client_thread (void *arg)
 		client->thread_init (client->thread_init_arg);
 	}
 
-	if( client->control->process_cbset ) {
+	if( client->control->process_cbset || client->control->thread_cb_cbset ) {
 		// lets wait for the process thread
 		// when its ready to go, the process_mutex
 		// is unlocked.
@@ -2401,7 +2401,7 @@ jack_start_thread (jack_client_t *client)
 	}
 
 
-	if (client->control->process_cbset) {
+	if (client->control->process_cbset || client->control->thread_cb_cbset) {
 	if (jack_client_create_thread(client,
 				      &client->process_thread,
 				      client->engine->client_priority,
@@ -2424,7 +2424,7 @@ jack_activate (jack_client_t *client)
 	if (client->control->type == ClientInternal) {
 
 		pthread_mutex_lock( &client->process_mutex );
-		if (client->control->process_cbset) {
+		if (client->control->process_cbset || client->control->thread_cb_cbset) {
 			if (jack_client_create_thread(client,
 						&client->process_thread,
 						client->engine->client_priority,
