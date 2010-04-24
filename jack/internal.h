@@ -540,7 +540,7 @@ extern char *jack_default_server_name (void);
 void silent_jack_error_callback (const char *desc);
 
 /* needed for port management */
-extern jack_port_t *jack_port_by_id_int (const jack_client_t *client,
+extern jack_port_t *jack_port_by_id_int (jack_client_t *client,
 					 jack_port_id_t id, int* free);
 
 extern jack_port_t *jack_port_by_name_int (jack_client_t *client,

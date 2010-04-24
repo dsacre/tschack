@@ -254,18 +254,22 @@ jack_port_register (jack_client_t *client,
 	req.x.port_info.buffer_size = buffer_size;
 	req.x.port_info.client_id = client->control->id;
 
+        pthread_mutex_lock( &client->ports_mutex );
 	if (jack_client_deliver_request (client, &req)) {
 		jack_error ("cannot deliver port registration request");
+                pthread_mutex_unlock( &client->ports_mutex );
 		return NULL;
 	}
 
 	if ((port = jack_port_new (client, req.x.port_info.port_id,
 				   client->engine)) == NULL) {
 		jack_error ("cannot allocate client side port structure");
+                pthread_mutex_unlock( &client->ports_mutex );
 		return NULL;
 	}
 
 	client->ports_locked = jack_slist_prepend (client->ports_locked, port);
+        pthread_mutex_unlock( &client->ports_mutex );
 
 	return port;
 }
@@ -405,7 +409,7 @@ jack_port_get_all_connections (const jack_client_t *client,
 			jack_error ("cannot read port id from server");
 			return 0;
 		}
-		tmp = jack_port_by_id_int (client, port_id, &need_free);
+		tmp = jack_port_by_id_int ((jack_client_t *)client, port_id, &need_free);
 		ret[i] = tmp->shared->name;
 		if (need_free) {
 			free (tmp);
@@ -419,16 +423,19 @@ jack_port_get_all_connections (const jack_client_t *client,
 }
 
 jack_port_t *
-jack_port_by_id_int (const jack_client_t *client, jack_port_id_t id, int* free)
+jack_port_by_id_int (jack_client_t *client, jack_port_id_t id, int* free)
 {
 	JSList *node;
 
+        pthread_mutex_lock( &client->ports_mutex );
 	for (node = client->ports_locked; node; node = jack_slist_next (node)) {
 		if (((jack_port_t *) node->data)->shared->id == id) {
 			*free = FALSE;
+                        pthread_mutex_unlock( &client->ports_mutex );
 			return (jack_port_t *) node->data;
 		}
 	}
+        pthread_mutex_unlock( &client->ports_mutex );
 
 	if (id >= client->engine->port_max)
 		return NULL;

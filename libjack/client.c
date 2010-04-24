@@ -360,6 +360,8 @@ jack_client_alloc ()
 
 	client->chain_override = -1;
 
+        pthread_mutex_init ( &client->ports_mutex, NULL );
+
 	client->ports_locked = NULL;
 	client->ports_rt[0] = NULL;
 	client->ports_rt[1] = NULL;
@@ -440,6 +442,7 @@ jack_client_fix_port_buffers (jack_client_t *client)
 	   buffer on the next call (if there is one).
 	*/
 
+        pthread_mutex_lock( &client->ports_mutex );
 	for (node = client->ports_locked; node; node = jack_slist_next (node)) {
 		port = (jack_port_t *) node->data;
 
@@ -461,6 +464,7 @@ jack_client_fix_port_buffers (jack_client_t *client)
 			}
 		}
 	}
+        pthread_mutex_unlock( &client->ports_mutex );
 }
 
 int
@@ -514,6 +518,7 @@ jack_client_handle_port_connection (jack_client_t *client, jack_event_t *event)
 			/* jack_port_by_id_int() always returns an internal
 			 * port that does not need to be deallocated 
 			 */
+
 			control_port = jack_port_by_id_int (client, event->x.self_id,
 							    &need_free);
 			pthread_mutex_lock (&control_port->connection_lock);
@@ -529,6 +534,7 @@ jack_client_handle_port_connection (jack_client_t *client, jack_event_t *event)
 							control_port->connections_locked,
 							node);
 					jack_slist_free_1 (node);
+                                        //XXX: need proper refcounting on these.
 					//free (other);
 					break;
 				}
@@ -628,11 +634,11 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 		DEBUG ("opened new graph_wait_fd %d (%s)", client->graph_wait_fd, path);
 	} 
 
-	// now check who we feed, and make sure all fds are open.
 
 	jack_slist_free( client->ports_rt[setup_chain] );
 	client->ports_rt[setup_chain] = NULL;
 
+        pthread_mutex_lock( &client->ports_mutex );
 	for (pnode = client->ports_locked; pnode; pnode = jack_slist_next (pnode)) {
 		jack_port_t *port = (jack_port_t *) pnode->data;
 
@@ -644,7 +650,9 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 		pthread_mutex_unlock( &port->connection_lock );
 		client->ports_rt[setup_chain] = jack_slist_append( client->ports_rt[setup_chain], port );
 	}
+        pthread_mutex_unlock( &client->ports_mutex );
 
+	// now check who we feed, and make sure all fds are open.
 	for (i = 0; i<JACK_MAX_CLIENTS; i++)
 	{
 		if( client->graph_next_fds_array[i] != -1 )
@@ -2632,9 +2640,12 @@ jack_client_close_aux (jack_client_t *client)
 
 	}
 
+        pthread_mutex_lock( &client->ports_mutex );
 	for (node = client->ports_locked; node; node = jack_slist_next (node)) {
 		free (node->data);
 	}
+        pthread_mutex_unlock( &client->ports_mutex );
+
 	jack_slist_free (client->ports_locked);
 	jack_slist_free (client->ports_rt[0]);
 	jack_slist_free (client->ports_rt[1]);
