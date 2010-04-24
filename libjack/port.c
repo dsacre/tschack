@@ -254,24 +254,14 @@ jack_port_register (jack_client_t *client,
 	req.x.port_info.buffer_size = buffer_size;
 	req.x.port_info.client_id = client->control->id;
 
-        pthread_mutex_lock( &client->ports_mutex );
 	if (jack_client_deliver_request (client, &req)) {
 		jack_error ("cannot deliver port registration request");
                 pthread_mutex_unlock( &client->ports_mutex );
 		return NULL;
 	}
 
-	if ((port = jack_port_new (client, req.x.port_info.port_id,
-				   client->engine)) == NULL) {
-		jack_error ("cannot allocate client side port structure");
-                pthread_mutex_unlock( &client->ports_mutex );
-		return NULL;
-	}
-
-	client->ports_locked = jack_slist_prepend (client->ports_locked, port);
-        pthread_mutex_unlock( &client->ports_mutex );
-
-	return port;
+        int free;
+	return jack_port_by_id_int( client, req.x.port_info.port_id, &free );
 }
 
 int 
@@ -441,6 +431,16 @@ jack_port_by_id_int (jack_client_t *client, jack_port_id_t id, int* free)
 		return NULL;
 
 	if (client->engine->ports[id].in_use) {
+                if (client->engine->ports[id].client_id == client->control->id)
+                {
+                        // one of ours. but its not yet in the list.
+                        jack_port_t *p = jack_port_new (client, id, client->engine);
+                        pthread_mutex_lock( &client->ports_mutex );
+                        client->ports_locked = jack_slist_prepend( client->ports_locked, p );
+                        *free = FALSE;
+                        pthread_mutex_unlock( &client->ports_mutex );
+                        return p;
+                }
 		*free = TRUE;
 		return jack_port_new (client, id, client->engine);
 	}
