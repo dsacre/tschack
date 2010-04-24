@@ -94,8 +94,6 @@ jack_sync_poll_stop (jack_engine_t *engine)
 		}
 	}
 
-	//JOQ: check invariant for debugging...
-	assert (poll_count == engine->control->sync_remain);
 	VERBOSE (engine,
 		 "sync poll halted with %" PRIu32
 		 " clients and %8.6f secs remaining",
@@ -125,7 +123,7 @@ jack_sync_poll_start (jack_engine_t *engine)
 	}
 
 	//JOQ: check invariant for debugging...
-	assert (sync_count == engine->control->sync_clients);
+	//assert (sync_count == engine->control->sync_clients);
 	engine->control->sync_remain = sync_count;
 	engine->control->sync_time_left = engine->control->sync_timeout;
 	VERBOSE (engine, "transport Starting, sync poll of %" PRIu32
