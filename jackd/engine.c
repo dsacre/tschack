@@ -857,7 +857,7 @@ jack_engine_process (jack_engine_t *engine, jack_nframes_t nframes)
 		ctl->awake_at = 0;
 		ctl->finished_at = 0;
 
-		for( pnode = client->ports; pnode; pnode=jack_slist_next(pnode) ) {
+		for( pnode = client->ports_rt[curr_chain]; pnode; pnode=jack_slist_next(pnode) ) {
 		  jack_port_internal_t *port = pnode->data;
 		  port->shared->activation_count = engine->port_activation_counts_init[curr_chain][port->shared->id];
 		}
@@ -885,8 +885,6 @@ jack_engine_process (jack_engine_t *engine, jack_nframes_t nframes)
 	  return jack_engine_wait_graph( engine );
 	
 	return 0;
-
-
 }
 
 static void 
@@ -1846,8 +1844,7 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 
 	engine->process_graph_list[0] = 0;
 	engine->process_graph_list[1] = 0;
-	pthread_mutex_init( &engine->process_graph_mutex[0], NULL );
-	pthread_mutex_init( &engine->process_graph_mutex[1], NULL );
+	pthread_mutex_init( &engine->swap_mutex, NULL );
 	engine->pending_chain = 0;
 
 
@@ -1997,7 +1994,7 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	engine->control->frame_timer.filter_coefficient = 0.01;
 	engine->control->frame_timer.second_order_integrator = 0;
 	engine->control->current_process_chain = 0;
-	engine->control->next_process_chain = 0;
+	engine->control->current_setup_chain = 1;
 
 	for( i=0; i<JACK_MAX_CLIENTS; i++ )
 		engine->control->per_client[i].activation_count = -1;
@@ -2286,16 +2283,18 @@ jack_run_one_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 	static int consecutive_excessive_delays = 0;
 	int curr_chain;
 
-	// promote chain changes.
-	if( engine->control->current_process_chain != engine->control->next_process_chain ) {
-		// we need to signal the server thread here that we switched chain.
-		VERBOSE( engine, "======= chain switch nextchain: %d getting lock...", engine->control->next_process_chain ); 
-		pthread_mutex_lock ( & engine->process_graph_mutex[engine->control->next_process_chain] );
-		pthread_mutex_unlock ( & engine->process_graph_mutex[engine->control->current_process_chain] );
-		VERBOSE( engine, "======= chain switch nextchain: %d", engine->control->next_process_chain ); 
-	}
-	engine->control->current_process_chain = engine->control->next_process_chain;
-	engine->control->next_process_chain = engine->pending_chain;
+        if (pthread_mutex_trylock (&engine->swap_mutex) == 0)
+        {
+                // promote chain changes.
+                if( engine->control->current_process_chain != engine->pending_chain ) {
+                        // we need to signal the server thread here that we switched chain.
+                        VERBOSE( engine, "======= chain switch nextchain: %d getting lock...", engine->pending_chain ); 
+                        engine->control->current_setup_chain = engine->control->current_process_chain;
+                        engine->control->current_process_chain = engine->pending_chain;
+                }
+
+                pthread_mutex_unlock (&engine->swap_mutex);
+        }
 
 	curr_chain = engine->control->current_process_chain;
 
@@ -2428,9 +2427,6 @@ jack_run_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 			timer->reset_pending = 0;
 			no_increment = 1;
 		}
-
-		// we need to need to keep the current chain locked, all the time.
-		pthread_mutex_lock( &engine->process_graph_mutex[engine->control->current_process_chain] );
 	}
 
 	if (timer->reset_pending) {
@@ -2851,11 +2847,12 @@ static void
 jack_driver_do_reorder( jack_client_t *client, jack_event_t *event )
 {
   JSList *pnode;
-  int setup_chain = (client->engine->current_process_chain+1)&1;
+  int setup_chain = (client->engine->current_setup_chain);
 
   //jack_slist_free( client->ports_rt[setup_chain] );
   //client->ports_rt[setup_chain] = NULL;
 
+  pthread_mutex_lock( &client->ports_mutex );
   for( pnode=client->ports_locked; pnode; pnode=jack_slist_next(pnode) ) {
     jack_port_t *port = pnode->data;
 
@@ -2863,6 +2860,7 @@ jack_driver_do_reorder( jack_client_t *client, jack_event_t *event )
     port->connections_rt[setup_chain] = jack_slist_copy( port->connections_locked );
     //client->ports_rt[setup_chain] = jack_slist_append( client->ports_rt[setup_chain], port );
   }
+  pthread_mutex_unlock( &client->ports_mutex );
 }
 int
 jack_deliver_event (jack_engine_t *engine, jack_client_internal_t *client,
@@ -3069,9 +3067,10 @@ jack_rechain_graph (jack_engine_t *engine)
 	int err = 0;
 	jack_client_internal_t *client, *subgraph_client;
 	jack_event_t event;
+        int setup_chain;
 	//int upstream_is_jackd;
-	int setup_chain = (engine->control->current_process_chain+1)&1;
-	int curr_chain = engine->control->current_process_chain;
+        pthread_mutex_lock( &engine->swap_mutex );
+	setup_chain = engine->control->current_setup_chain;
 
 	//jack_clear_fifos (engine, setup_chain);
 
@@ -3080,8 +3079,6 @@ jack_rechain_graph (jack_engine_t *engine)
 	VERBOSE(engine, "++ jack_rechain_graph(): chain %d", setup_chain );
 
 	event.type = GraphReordered;
-
-	pthread_mutex_lock( & engine->process_graph_mutex[setup_chain] );
 
 	jack_slist_free( engine->process_graph_list[setup_chain] );
 	engine->process_graph_list[setup_chain] = NULL;
@@ -3104,7 +3101,7 @@ jack_rechain_graph (jack_engine_t *engine)
 		client = (jack_client_internal_t *) node->data;
 
 		if (client->control->id != 0)
-			if (! client->control->process_cbset && !client->control->thread_cb_cbset) {
+			if ((!client->control->process_cbset) && (!client->control->thread_cb_cbset)) {
 				continue;
 			}
 
@@ -3113,66 +3110,71 @@ jack_rechain_graph (jack_engine_t *engine)
 			((jack_client_internal_t *) node->data)->control->active);
 
 		if (client->control->active)
-	       	{
-			int has_output_connections = ( (client->control->id == 0) ? 1 : 0 );
-			for( pnode = client->ports; pnode; pnode=jack_slist_next(pnode) )
-			{
-			  jack_port_internal_t *own_port = pnode->data;
+                {
+                        int has_output_connections = ( (client->control->id == 0) ? 1 : 0 );
 
-			  if( own_port->shared->flags & JackPortIsOutput )
-			  {
-			    if( own_port->connections != NULL )
-			      has_output_connections = 1;
-			    continue;
-			  }
+                        jack_slist_free(client->ports_rt[setup_chain]);
+                        client->ports_rt[setup_chain] = NULL;
 
-			  for( cnode=own_port->connections; cnode; cnode=jack_slist_next(cnode) )
-			  {
-			    jack_connection_internal_t *conn = cnode->data;
-			    jack_port_internal_t *other_port = conn->source;
+                        for( pnode = client->ports; pnode; pnode=jack_slist_next(pnode) )
+                        {
+                                jack_port_internal_t *own_port = pnode->data;
+                                client->ports_rt[setup_chain]= jack_slist_append( client->ports_rt[setup_chain], own_port );
 
-			    VERBOSE( engine, "checking port %s...", other_port->shared->name );
-			    if( other_port->shared->client_id == 0 )
-			      //driver ports dont count.
-			      continue;
+                                if( own_port->shared->flags & JackPortIsOutput )
+                                {
+                                        if( own_port->connections != NULL )
+                                                has_output_connections = 1;
+                                        continue;
+                                }
 
-			    if( conn->dir != 1 )
-			      continue;
+                                for( cnode=own_port->connections; cnode; cnode=jack_slist_next(cnode) )
+                                {
+                                        jack_connection_internal_t *conn = cnode->data;
+                                        jack_port_internal_t *other_port = conn->source;
 
-			    VERBOSE( engine, "counts" );
+                                        VERBOSE( engine, "checking port %s...", other_port->shared->name );
+                                        if( other_port->shared->client_id == 0 )
+                                                //driver ports dont count.
+                                                continue;
 
-			    engine->port_activation_counts_init[setup_chain][own_port->shared->id] += 1;
-			  }
-			  VERBOSE( engine, "port %s activation_count=%d", own_port->shared->name, 
-			      engine->port_activation_counts_init[setup_chain][own_port->shared->id] );
+                                        if( conn->dir != 1 )
+                                                continue;
 
-			  if( engine->port_activation_counts_init[setup_chain][own_port->shared->id] != 0 )
-			    engine->client_activation_counts_init[setup_chain][client->control->id] += 1;
-			}
+                                        engine->port_activation_counts_init[setup_chain][own_port->shared->id] += 1;
+                                        VERBOSE( engine, "counts %d", engine->port_activation_counts_init[setup_chain][own_port->shared->id]);
 
-			if( has_output_connections == 0 ) {
-			  VERBOSE( engine, "no outs... adding to driver 0 count" );
-			  engine->client_activation_counts_init[setup_chain][0] += 1;
-			}
+                                }
+                                VERBOSE( engine, "port %s activation_count=%d", own_port->shared->name, 
+                                                engine->port_activation_counts_init[setup_chain][own_port->shared->id] );
 
-			// ok ... everything counted.. 
+                                if( engine->port_activation_counts_init[setup_chain][own_port->shared->id] != 0 )
+                                        engine->client_activation_counts_init[setup_chain][client->control->id] += 1;
+                        }
 
-			engine->process_graph_list[setup_chain] = 
-			  jack_slist_append( engine->process_graph_list[setup_chain], client );
+                        if( has_output_connections == 0 ) {
+                                VERBOSE( engine, "no outs... adding to driver 0 count" );
+                                engine->client_activation_counts_init[setup_chain][0] += 1;
+                        }
 
-			client->subgraph_start_fd = jack_get_fifo_fd( engine, client->control->id );
-			
-			if (jack_client_is_internal (client)) {
-				
-				jack_deliver_event (engine, client, &event);
+                        // ok ... everything counted.. 
 
-			} else {
-				event.x.n = client->execution_order;
-				event.y.n = 0;
-				jack_deliver_event (engine, client, &event);
-				n++;
-			}
-		}
+                        engine->process_graph_list[setup_chain] = 
+                                jack_slist_append( engine->process_graph_list[setup_chain], client );
+
+                        client->subgraph_start_fd = jack_get_fifo_fd( engine, client->control->id );
+
+                        if (jack_client_is_internal (client)) {
+
+                                jack_deliver_event (engine, client, &event);
+
+                        } else {
+                                event.x.n = client->execution_order;
+                                event.y.n = 0;
+                                jack_deliver_event (engine, client, &event);
+                                n++;
+                        }
+                }
 	}
 
 	// now determine the clients, the server needs to wakeup directly.
@@ -3194,19 +3196,11 @@ jack_rechain_graph (jack_engine_t *engine)
 
 	// chain is setup.
 	// now we need to trigger the swap.
-	pthread_mutex_unlock( & engine->process_graph_mutex[setup_chain] );
 
 	engine->pending_chain = setup_chain;
-	VERBOSE (engine, "chain swap triggered...");
+	VERBOSE (engine, "chain swap triggered... %d", engine->pending_chain);
 
-	// unlock the graph lock... to prevent deadlock for xrun reporting.
-	// thats a bit shitty...
-	jack_unlock_graph(engine);
-	pthread_mutex_lock( & engine->process_graph_mutex[curr_chain] );
-	pthread_mutex_unlock( & engine->process_graph_mutex[curr_chain] );
-
-	jack_lock_graph(engine);
-
+        pthread_mutex_unlock( &engine->swap_mutex );
 
 	VERBOSE (engine, "-- jack_rechain_graph()");
 
@@ -3909,7 +3903,8 @@ jack_port_disconnect_internal (jack_engine_t *engine,
 				}
 			} /* else self-connection: do nothing */
 
-			free (connect);
+                        //XXX: need proper refcounting on these.
+			//free (connect);
 			ret = 0;
 			break;
 		}

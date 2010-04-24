@@ -220,7 +220,7 @@ typedef struct {
     int32_t		  engine_ok;
     int32_t		  problems;
     volatile int32_t	  current_process_chain;
-    volatile int32_t	  next_process_chain;
+    volatile int32_t	  current_setup_chain;
     volatile _Atomic_word execution_tokens;
     jack_per_client_ctl_t per_client[JACK_MAX_CLIENTS];
     jack_port_type_id_t	  n_port_types;
@@ -471,6 +471,7 @@ typedef struct _jack_client_internal {
     int        event_fd;
     int        subgraph_start_fd;
     JSList    *ports;    /* protected by engine->client_lock */
+    JSList    *ports_rt[2];   
     JSList    *truefeeds;    /* protected by engine->client_lock */
     JSList    *sortfeeds;    /* protected by engine->client_lock */
     int	       fedcount;

@@ -580,6 +580,9 @@ jack_setup_client_control (jack_engine_t *engine, int fd,
 	client->handle = NULL;
 	client->finish = NULL;
 	client->error = 0;
+        client->ports = NULL;
+        client->ports_rt[0] = NULL;
+        client->ports_rt[1] = NULL;
 
 	if (type != ClientExternal) {
 		

@@ -619,10 +619,10 @@ jack_handle_reorder (jack_client_t *client, jack_event_t *event)
 
 	int i;
 	char path[PATH_MAX+1];
-	int setup_chain = (client->engine->current_process_chain+1)&1;
+	int setup_chain = (client->engine->current_setup_chain);
 	JSList *pnode;
 
-	DEBUG ("graph reorder... n=%d\n", event->x.n );
+	DEBUG ("graph reorder... chain = %d", setup_chain );
 
 	if (client->graph_wait_fd == -1) {
 		snprintf (path, sizeof(path), "%s-%d", client->fifo_prefix, client->control->id);
@@ -1804,7 +1804,7 @@ jack_client_graph_wait( jack_client_t* client )
   // it will never change.
 
 	jack_client_control_t *control = client->control;
-	int curr_chain=0;
+	int curr_chain=client->engine->current_process_chain;
 
 	DEBUG ("client polling on graph_wait_fd" );
 	
@@ -1960,7 +1960,6 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 			jack_port_t *dst = cnode->data;
 			jack_client_id_t dst_id = dst->shared->client_id;
 
-			output_connections = 1;
 
 			DEBUG( "-- looking at port %s count = %d", dst->shared->name, dst->shared->activation_count );
 
@@ -1970,6 +1969,9 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 			if( dst->shared->activation_count == 0 )
 				// seems to be feedback.... skip
 				continue;
+
+			output_connections = 1;
+
 			if( __exchange_and_add( &(dst->shared->activation_count), -1 ) == 1 )
 			{
 				_Atomic_word *cla = &( client->engine->per_client[dst_id].activation_count );
@@ -1977,7 +1979,6 @@ jack_wake_next_client (jack_client_t* client, int curr_chain)
 					// set the client to triggered.
 					client->engine->per_client[dst_id].state = Triggered;
 					client->engine->per_client[dst_id].triggered_at = jack_get_microseconds();
-
 				}
 			}
 		}

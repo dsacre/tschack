@@ -159,10 +159,10 @@ struct _jack_engine {
 
     JSList	   *process_graph_list[2];
     JSList	   *server_wakeup_list[2];
-    pthread_mutex_t process_graph_mutex[2];
     _Atomic_word   *client_activation_counts_init[2];
     _Atomic_word   *port_activation_counts_init[2];
 
+    pthread_mutex_t swap_mutex;
 
 
 #define JACK_ENGINE_ROLLING_COUNT 32
