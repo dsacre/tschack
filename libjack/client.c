@@ -2449,9 +2449,8 @@ jack_activate (jack_client_t *client)
 		pthread_mutex_lock( &client->process_mutex );
 		pthread_mutex_unlock( &client->process_mutex );
 		client->rt_thread_ok = TRUE;
-
 		goto startit;
-	}
+        }
 
 	if (client->control->type == ClientDriver) {
 		goto startit;
