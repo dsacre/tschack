@@ -96,10 +96,15 @@ jack_client_do_deactivate (jack_engine_t *engine,
 		engine->external_client_cnt--;
 	}
 	
+        int curr_chain = engine->control->current_process_chain;
 
 	if (sort_graph) {
 		jack_sort_graph (engine);
 	}
+
+        while (engine->control->current_process_chain == curr_chain)
+                usleep(1000);
+
 	return 0;
 }
 
