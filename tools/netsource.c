@@ -82,6 +82,7 @@ int reply_port = 0;
 int bind_port = 0;
 int redundancy = 1;
 jack_client_t *client;
+packet_cache * packcache = 0;
 
 int state_connected = 0;
 int state_latency = 0;
@@ -136,7 +137,7 @@ alloc_ports (int n_capture_audio, int n_playback_audio, int n_capture_midi, int 
         }
 	if( bitdepth == 1000 ) {
 #if HAVE_CELT
-#if HAVE_CELT_API_0_7
+#if HAVE_CELT_API_0_7 || HAVE_CELT_API_0_8
 	    CELTMode *celt_mode = celt_mode_create( jack_get_sample_rate( client ), jack_get_buffer_size(client), NULL );
 	    capture_srcs = jack_slist_append(capture_srcs, celt_decoder_create( celt_mode, 1, NULL ) );
 #else
@@ -179,7 +180,7 @@ alloc_ports (int n_capture_audio, int n_playback_audio, int n_capture_midi, int 
         }
 	if( bitdepth == 1000 ) {
 #if HAVE_CELT
-#if HAVE_CELT_API_0_7
+#if HAVE_CELT_API_0_7 || HAVE_CELT_API_0_8
 	    CELTMode *celt_mode = celt_mode_create( jack_get_sample_rate (client), jack_get_buffer_size(client), NULL );
 	    playback_srcs = jack_slist_append(playback_srcs, celt_encoder_create( celt_mode, 1, NULL ) );
 #else
@@ -328,7 +329,7 @@ process (jack_nframes_t nframes, void *arg)
 	    else if (cont_miss > 50+5*latency)
 	    {
 		    state_connected = 0;
-		    packet_cache_reset_master_address( global_packcache );
+		    packet_cache_reset_master_address( packcache );
 		    //printf ("Frame %d  \tRealy too many packets missed (%d). Let's reset the counter\n", framecnt, cont_miss);
 		    cont_miss = 0;
 	    }
@@ -354,19 +355,19 @@ process (jack_nframes_t nframes, void *arg)
 	    if ( ! netjack_poll_deadline( input_fd, deadline ) )
 		break;
 
-	    packet_cache_drain_socket(global_packcache, input_fd);
+	    packet_cache_drain_socket(packcache, input_fd);
 
-	    if (packet_cache_get_next_available_framecnt( global_packcache, framecnt - latency, &got_frame ))
+	    if (packet_cache_get_next_available_framecnt( packcache, framecnt - latency, &got_frame ))
 		if( got_frame == (framecnt - latency) )
 		    break;
 	}
     } else {
 	// normally:
 	// only drain socket.
-	packet_cache_drain_socket(global_packcache, input_fd);
+	packet_cache_drain_socket(packcache, input_fd);
     }
 
-    size = packet_cache_retreive_packet_pointer( global_packcache, framecnt - latency, (char**)&rx_packet_ptr, rx_bufsize, &packet_recv_timestamp );
+    size = packet_cache_retreive_packet_pointer( packcache, framecnt - latency, (char**)&rx_packet_ptr, rx_bufsize, &packet_recv_timestamp );
     /* First alternative : we received what we expected. Render the data
      * to the JACK ports so it can be played. */
     if (size == rx_bufsize)
@@ -393,7 +394,7 @@ process (jack_nframes_t nframes, void *arg)
 	state_recv_packet_queue_time = recv_time_offset;
 	state_connected = 1;
         sync_state = pkthdr_rx->sync_state;
-	packet_cache_release_packet( global_packcache, framecnt - latency );
+	packet_cache_release_packet( packcache, framecnt - latency );
     }
     /* Second alternative : we've received something that's not
      * as big as expected or we missed a packet. We render silence
@@ -401,7 +402,7 @@ process (jack_nframes_t nframes, void *arg)
     else
     {
 	jack_nframes_t latency_estimate;
-	if( packet_cache_find_latency( global_packcache, framecnt, &latency_estimate ) )
+	if( packet_cache_find_latency( packcache, framecnt, &latency_estimate ) )
 	    //if( (state_latency == 0) || (latency_estimate < state_latency) )
 		state_latency = latency_estimate;
 
@@ -467,7 +468,7 @@ process (jack_nframes_t nframes, void *arg)
 	    else if (cont_miss > 50+5*latency)
 	    {
 		    state_connected = 0;
-		    packet_cache_reset_master_address( global_packcache );
+		    packet_cache_reset_master_address( packcache );
 		    //printf ("Frame %d  \tRealy too many packets missed (%d). Let's reset the counter\n", framecnt, cont_miss);
 		    cont_miss = 0;
 	    }
@@ -712,7 +713,7 @@ main (int argc, char *argv[])
 	net_period = ceilf((float) jack_get_buffer_size (client) / (float) factor);
 
     int rx_bufsize =  get_sample_size (bitdepth) * capture_channels * net_period + sizeof (jacknet_packet_header);
-    global_packcache = packet_cache_new (latency + 50, rx_bufsize, mtu);
+    packcache = packet_cache_new (latency + 50, rx_bufsize, mtu);
 
     /* tell the JACK server that we are ready to roll */
     if (jack_activate (client))
@@ -780,6 +781,6 @@ main (int argc, char *argv[])
     printf( "going down now...\n" ); 
     // trying to exit
     jack_client_close (client);
-    packet_cache_free (global_packcache);
+    packet_cache_free (packcache);
     exit (0);
 }

@@ -564,5 +564,12 @@ void jack_client_shutdown_rt_thread( jack_client_t *client );
 #  define unlikely(x)	(x)
 #endif
 
+#ifdef  VALGRIND_CLEAN
+#include <string.h>
+#define VALGRIND_MEMSET(ptr,val,size) memset ((ptr),(val),(size))
+#else
+#define VALGRIND_MEMSET(ptr,val,size) 
+#endif
+
 #endif /* __jack_internal_h__ */
 
