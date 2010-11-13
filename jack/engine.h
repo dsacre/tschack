@@ -76,7 +76,7 @@ struct _jack_engine {
     void (*delay)	    (struct _jack_engine *, float delayed_usecs);
     void (*transport_cycle_start) (struct _jack_engine *, jack_time_t time);
     void (*driver_exit)     (struct _jack_engine *);
-
+    jack_time_t (*get_microseconds)(void);
     /* "private" sections starts here */
 
     /* engine serialization -- use precedence for deadlock avoidance */
@@ -269,4 +269,6 @@ jack_client_internal_t *
 jack_client_by_name (jack_engine_t *engine, const char *name);
 
 int  jack_deliver_event (jack_engine_t *, jack_client_internal_t *, jack_event_t *);
+void jack_stop_watchdog (jack_engine_t * );
+
 #endif /* __jack_engine_h__ */
