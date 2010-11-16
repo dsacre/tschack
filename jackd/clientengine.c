@@ -971,9 +971,6 @@ jack_client_activate (jack_engine_t *engine, jack_client_id_t id)
 
 		jack_transport_activate(engine, client);
 
-		jack_sort_graph (engine);
-
-
 		for (i = 0; i < engine->control->n_port_types; ++i) {
 			event.type = AttachPortSegment;
 			event.y.ptid = i;
@@ -982,6 +979,8 @@ jack_client_activate (jack_engine_t *engine, jack_client_id_t id)
 
 		event.type = BufferSizeChange;
 		jack_deliver_event (engine, client, &event);
+
+		jack_sort_graph (engine);
 
 		// send delayed notifications for ports.
 		for (node = client->ports; node; node = jack_slist_next (node)) {
