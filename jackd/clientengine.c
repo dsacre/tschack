@@ -100,10 +100,10 @@ jack_client_do_deactivate (jack_engine_t *engine,
 
 	if (sort_graph) {
 		jack_sort_graph (engine);
+		while (engine->control->current_process_chain == curr_chain)
+			usleep(1000);
 	}
 
-        while (engine->control->current_process_chain == curr_chain)
-                usleep(1000);
 
 	return 0;
 }
