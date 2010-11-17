@@ -2117,10 +2117,6 @@ jack_thread_wait (jack_client_t* client, int status)
 	}
 
 	if (status || client->control->dead || !client->engine->engine_ok) {
-		if( client->control->dead ) 
-		  jack_error( "we are dead :(" );
-		else
-		  jack_error("status.... exit\n");
 		return 0;
 	}
 	
@@ -2234,7 +2230,6 @@ jack_process_thread_aux (void *arg)
 
 	}
 
-	jack_error( "process thread exiting now... " );
 	jack_process_thread_suicide (client);
 }
 
@@ -2568,12 +2563,11 @@ jack_client_shutdown_rt_thread( jack_client_t *client )
 	write( client->process_pipe[1], &c, 1 );
 
 	pthread_mutex_lock( &client->process_mutex );
-	jack_error( "got process mutex." );
+
 	pthread_cancel (client->process_thread);
 	pthread_cond_signal( &client->process_wakeup );
 	pthread_mutex_unlock( &client->process_mutex );
 	pthread_join (client->process_thread, &status);
-	jack_error( "process thread joined" );
 }
 
 static int
@@ -2600,7 +2594,6 @@ jack_client_close_aux (jack_client_t *client)
 			thread_terminate (machThread);
 		}
 #else
-		jack_error( "shutdown sequence..." );
 		if (client->rt_thread_ok)
 			jack_client_shutdown_rt_thread (client);
 	
