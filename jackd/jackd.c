@@ -355,7 +355,7 @@ jack_drivers_load ()
 
 static void copyright (FILE* file)
 {
-	fprintf (file, "jackd " VERSION "\n"
+	fprintf (file, "tschack " VERSION "\n"
 "Copyright 2001-2009 Paul Davis, Stephane Letz, Jack O'Quinn, Torben Hohn and others.\n"
 "jackd comes with ABSOLUTELY NO WARRANTY\n"
 "This is free software, and you are welcome to redistribute it\n"
@@ -680,7 +680,7 @@ main (int argc, char *argv[])
 	}
 
 	if (show_version) {
-		printf ( "jackd version " VERSION 
+		printf ( "tschack version " VERSION 
 				" tmpdir " DEFAULT_TMP_DIR 
 				" protocol " PROTOCOL_VERSION
 				"\n");
