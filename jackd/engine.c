@@ -4177,7 +4177,6 @@ jack_port_do_register (jack_engine_t *engine, jack_request_t *req, int internal)
 	size_t len;
 
 	for (i = 0; i < engine->control->n_port_types; ++i) {
-		jack_error( "porttype= %s", engine->control->port_types[i].type_name );
 		if (strcmp (req->x.port_info.type,
 			    engine->control->port_types[i].type_name) == 0) {
 			break;
