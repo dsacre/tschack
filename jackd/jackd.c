@@ -543,6 +543,7 @@ main (int argc, char *argv[])
 		{ "realtime", 0, 0, 'R' },
 		{ "replace-registry", 0, &replace_registry, 0 },
 		{ "silent", 0, 0, 's' },
+		{ "sync", 0, 0, 'S' },
 		{ "timeout", 1, 0, 't' },
 		{ "temporary", 0, 0, 'T' },
 		{ "unlock", 0, 0, 'u' },
@@ -639,6 +640,10 @@ main (int argc, char *argv[])
 		case 's':
 			jack_set_error_function (silent_jack_error_callback);
 			break;
+
+                case 'S':
+                        /* this option is for jack2 only (synchronous mode) */
+                        break;
 
 		case 'T':
 			temporary = 1;
