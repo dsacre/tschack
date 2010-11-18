@@ -68,6 +68,7 @@ static int do_unlock = 0;
 static jack_nframes_t frame_time_offset = 0;
 static int nozombies = 0;
 static int jobs = 32;
+static int timeout_count_threshold = 0;
 
 extern int sanitycheck (int, int);
 
@@ -151,7 +152,7 @@ jack_main (jack_driver_desc_t * driver_desc, JSList * driver_params)
 				       do_mlock, do_unlock, server_name,
 				       temporary, verbose, client_timeout,
 				       port_max, getpid(), frame_time_offset, 
-				       nozombies, jobs, drivers)) == 0) {
+				       nozombies, timeout_count_threshold, jobs, drivers)) == 0) {
 		jack_error ("cannot create engine");
 		return -1;
 	}
@@ -523,7 +524,7 @@ main (int argc, char *argv[])
 	int do_sanity_checks = 1;
 	int show_version = 0;
 
-	const char *options = "-d:P:uvshVrRZTFlt:mM:n:Np:c:j:";
+	const char *options = "-d:P:uvshVrRZTFlt:mM:n:Np:c:j:C:";
 	struct option long_options[] = 
 	{ 
 		/* keep ordered by single-letter option code */
@@ -550,6 +551,7 @@ main (int argc, char *argv[])
 		{ "version", 0, 0, 'V' },
 		{ "verbose", 0, 0, 'v' },
 		{ "nozombies", 0, 0, 'Z' },
+		{ "timeout-thres", 1, 0, 'C' },
 		{ 0, 0, 0, 0 }
 	};
 	int opt = 0;
@@ -584,6 +586,10 @@ main (int argc, char *argv[])
 				usage (stderr);
 				return -1;
 			}
+			break;
+
+		case 'C':
+			timeout_count_threshold = atoi (optarg);
 			break;
 
 		case 'd':

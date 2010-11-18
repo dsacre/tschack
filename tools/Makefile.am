@@ -41,6 +41,7 @@ bin_PROGRAMS = jack_load \
 	       jack_session_notify \
 	       jack_wait \
 	       jack_midi_dump \
+	       jack_load_test \
 	       $(JACK_TRANSPORT) \
 	       $(NETJACK_TOOLS)
 
@@ -112,6 +113,9 @@ jack_transport_LDFLAGS = -lreadline @READLINE_DEPS@ @OS_LDFLAGS@
 jack_transport_LDADD = $(top_builddir)/libjack/libjack.la
 endif
 
+jack_load_test_SOURCES = load_test.c
+jack_load_test_LDFLAGS = @OS_LDFLAGS@
+jack_load_test_LDADD = $(top_builddir)/libjack/libjack.la
 #
 # General purpose in-process loader/unloader
 #
