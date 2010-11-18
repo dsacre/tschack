@@ -117,6 +117,10 @@ struct jackctl_server
     /* uint, num_jobs */
     union jackctl_parameter_value jobs;
     union jackctl_parameter_value default_jobs;
+
+    /* int, timeout thres... */
+    union jackctl_parameter_value timothres;
+    union jackctl_parameter_value default_timothres;
 };
 
 struct jackctl_driver
@@ -1058,6 +1062,20 @@ jackctl_server_t * jackctl_server_create(
         goto fail_free_parameters;
     }
 
+    value.ui = 0;
+    if (jackctl_add_parameter(
+            &server_ptr->parameters,
+            "timeout-threshold",
+            "threshold for suspending processing",
+            "",
+            JackParamUInt,
+            &server_ptr->timothres,
+            &server_ptr->default_timothres,
+            value, NULL) == NULL)
+    {
+        goto fail_free_parameters;
+    }
+
     value.ui = 32;
     if (jackctl_add_parameter(
             &server_ptr->parameters,
@@ -1071,6 +1089,7 @@ jackctl_server_t * jackctl_server_create(
     {
         goto fail_free_parameters;
     }
+
     //TODO: need 
     //JackServerGlobals::on_device_acquire = on_device_acquire;
     //JackServerGlobals::on_device_release = on_device_release;
@@ -1177,7 +1196,7 @@ jackctl_server_start(
 				    server_ptr->do_mlock.b, server_ptr->do_unlock.b, server_ptr->name.str,
 				    server_ptr->temporary.b, server_ptr->verbose.b, server_ptr->client_timeout.i,
 				    server_ptr->port_max.i, getpid(), frame_time_offset, 
-				    server_ptr->nozombies.b, server_ptr->jobs.ui, drivers)) == 0) {
+				    server_ptr->nozombies.b, server_ptr->timothres.ui, server_ptr->jobs.ui, drivers)) == 0) {
 	    jack_error ("cannot create engine");
 	    goto fail_unregister;
     }
