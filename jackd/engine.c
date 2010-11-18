@@ -798,23 +798,25 @@ jack_process_external(jack_engine_t *engine, JSList *node)
 			 ctl->finished_at? (ctl->finished_at -
 					    ctl->signalled_at): 0);
 
-		jack_check_clients (engine, 1);
+		if (jack_check_clients (engine, 1)) {
 
-		engine->process_errors++;
-		return NULL;		/* will stop the loop */
-
-	} else {
-
-		DEBUG ("reading byte from subgraph_wait_fd==%d",
-		       client->subgraph_wait_fd);
-
-		if (read (client->subgraph_wait_fd, &c, sizeof(c))
-		    != sizeof (c)) {
-			jack_error ("pp: cannot clean up byte from graph wait "
-				    "fd (%s)", strerror (errno));
-			client->error++;
-			return NULL;	/* will stop the loop */
+			engine->process_errors++;
+			return NULL;		/* will stop the loop */
 		}
+	} else {
+		engine->timeout_count = 0;
+	}
+
+
+	DEBUG ("reading byte from subgraph_wait_fd==%d",
+	       client->subgraph_wait_fd);
+
+	if (read (client->subgraph_wait_fd, &c, sizeof(c))
+	    != sizeof (c)) {
+		jack_error ("pp: cannot clean up byte from graph wait "
+			    "fd (%s)", strerror (errno));
+		client->error++;
+		return NULL;	/* will stop the loop */
 	}
 
 	/* Move to next internal client (or end of client list) */
@@ -1739,7 +1741,7 @@ jack_engine_t *
 jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 		 const char *server_name, int temporary, int verbose,
 		 int client_timeout, unsigned int port_max, pid_t wait_pid,
-		 jack_nframes_t frame_time_offset, int nozombies, JSList *drivers)
+		 jack_nframes_t frame_time_offset, int nozombies, int timeout_count_threshold, JSList *drivers)
 {
 	jack_engine_t *engine;
 	unsigned int i;
@@ -1794,6 +1796,7 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	engine->driver_exit = jack_engine_driver_exit;
 	engine->transport_cycle_start = jack_transport_cycle_start;
 	engine->client_timeout_msecs = client_timeout;
+	engine->timeout_count = 0;
 	engine->problems = 0;
 
 	engine->next_client_id = 1;	/* 0 is a NULL client ID */
@@ -1811,6 +1814,7 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	engine->feedbackcount = 0;
 	engine->wait_pid = wait_pid;
 	engine->nozombies = nozombies;
+	engine->timeout_count_threshold = timeout_count_threshold;
 	engine->removing_clients = 0;
         engine->new_clients_allowed = 1;
 
@@ -2292,7 +2296,7 @@ jack_run_one_cycle (jack_engine_t *engine, jack_nframes_t nframes,
 		return 0;
 	}
 
-	if (engine->problems) {
+	if (engine->problems || (engine->timeout_count_threshold && (engine->timeout_count > engine->timeout_count_threshold))) {
 		VERBOSE (engine, "problem-driven null cycle problems=%d", engine->problems);
 		jack_unlock_problems (engine);
 		jack_unlock_graph (engine);
@@ -3323,6 +3327,7 @@ jack_sort_graph (jack_engine_t *engine)
 					   (JCompareFunc) jack_client_sort);
 	jack_compute_all_port_total_latencies (engine);
 	jack_rechain_graph (engine);
+	engine->timeout_count = 0;
 	VERBOSE (engine, "-- jack_sort_graph");
 }
 
