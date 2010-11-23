@@ -2763,7 +2763,7 @@ void
 jack_engine_t::jack_driver_do_reorder( jack_client_t *client, jack_event_t *event )
 {
   JSList *pnode;
-  int setup_chain = (client->engine->_current_setup_chain);
+  int setup_chain = (client->engine->current_setup_chain);
 
   //jack_slist_free( client->ports_rt[setup_chain] );
   //client->ports_rt[setup_chain] = NULL;
