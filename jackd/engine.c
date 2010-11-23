@@ -68,6 +68,7 @@
 #define PRIu32 "u"
 #define PRIu64 "lu"
 
+#include <exception>
 
 inline int 
 jack_engine_t::jack_rolling_interval (jack_time_t period_usecs)
@@ -475,6 +476,12 @@ jack_engine_t::jack_driver_buffer_size ( jack_nframes_t nframes)
 	return 0;
 }
 
+int
+jack_engine_t::jack_driver_buffer_size_aux ( jack_engine_t *engine, jack_nframes_t nframes)
+{
+	return engine->jack_driver_buffer_size (nframes);
+}
+
 /* handle client SetBufferSize request */
 int
 jack_engine_t::jack_set_buffer_size_request ( jack_nframes_t nframes)
@@ -869,9 +876,15 @@ jack_engine_t::jack_stop_watchdog ()
 #else
 
 void *
-jack_engine_t::jack_watchdog_thread (void *arg)
+jack_engine_t::jack_watchdog_thread_aux (void *arg)
 {
 	jack_engine_t *engine = (jack_engine_t *) arg;
+	return engine->jack_watchdog_thread();
+}
+
+void *
+jack_engine_t::jack_watchdog_thread ()
+{
 	struct timespec timo;
 
 	timo.tv_sec = JACKD_WATCHDOG_TIMEOUT / 1000;
@@ -914,7 +927,7 @@ jack_engine_t::jack_start_watchdog ()
 		watchdog_priority = max_priority;
 	
 	if (jack_client_create_thread (NULL, &_watchdog_thread, watchdog_priority,
-				       TRUE, jack_watchdog_thread, this)) {
+				       TRUE, jack_watchdog_thread_aux, this)) {
 		jack_error ("cannot start watchdog thread");
 		return -1;
 	}
@@ -1332,7 +1345,9 @@ jack_engine_t::do_request ( jack_request_t *req, int *reply_fd)
 int
 jack_engine_t::internal_client_request (void* ptr, jack_request_t *request)
 {
-	do_request ((jack_engine_t*) ptr, request, NULL);
+	jack_engine_t *engine = (jack_engine_t *) ptr;
+
+	engine->do_request (request, NULL);
 	return request->status;
 }
 
@@ -1438,12 +1453,17 @@ jack_engine_t::handle_client_ack_connection ( int client_fd)
 	return 0;
 }
 
-
 void *
-jack_engine_t::jack_server_thread (void *arg)
-
+jack_engine_t::jack_server_thread_aux (void *arg)
 {
 	jack_engine_t *engine = (jack_engine_t *) arg;
+	return engine->jack_server_thread ();
+}
+
+void *
+jack_engine_t::jack_server_thread ()
+
+{
 	struct sockaddr_un client_addr;
 	socklen_t client_addrlen;
 	int problemsProblemsPROBLEMS = 0;
@@ -1661,8 +1681,13 @@ jack_engine_t::jack_server_thread (void *arg)
 	return 0;
 }
 
-jack_engine_t *
-jack_engine_t::jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
+int
+jack_set_sample_rate_aux (jack_engine_t *engine, jack_nframes_t nframes)
+{
+	return engine->jack_set_sample_rate (nframes);
+}
+
+jack_engine_t::jack_engine_t (int realtime, int rtpriority, int do_mlock, int do_unlock,
 		 const char *server_name, int temporary, int verbose,
 		 int client_timeout, unsigned int port_max, pid_t wait_pid,
 		 jack_nframes_t frame_time_offset, int nozombies, int timeout_count_threshold, int jobs, JSList *drivers)
@@ -1683,7 +1708,7 @@ jack_engine_t::jack_engine_new (int realtime, int rtpriority, int do_mlock, int 
 	if (realtime) {
 		if (jack_acquire_real_time_scheduling (pthread_self(), 10) != 0) {
 			/* can't run realtime - time to bomb */
-			return NULL;
+			throw std::exception();
 		}
 
 		jack_drop_real_time_scheduling (pthread_self());
@@ -1694,7 +1719,7 @@ jack_engine_t::jack_engine_new (int realtime, int rtpriority, int do_mlock, int 
 			jack_error ("cannot lock down memory for jackd (%s)",
 				    strerror (errno));
 #ifdef ENSURE_MLOCK
-			return NULL;
+			throw std::exception();
 #endif /* ENSURE_MLOCK */
 		}
 #endif /* USE_MLOCK */
@@ -1713,11 +1738,11 @@ jack_engine_t::jack_engine_new (int realtime, int rtpriority, int do_mlock, int 
 	_driver_desc = NULL;
 	_driver_params = NULL;
 
-	_set_sample_rate = jack_set_sample_rate;
-	_set_buffer_size = jack_driver_buffer_size;
-	_run_cycle = jack_run_cycle;
-	_delay = jack_engine_delay;
-	_driver_exit = jack_engine_driver_exit;
+	_set_sample_rate = jack_set_sample_rate_aux;
+	_set_buffer_size = jack_driver_buffer_size_aux;
+	_run_cycle = jack_run_cycle_aux;
+	_delay = jack_engine_delay_aux;
+	_driver_exit = jack_engine_driver_exit_aux;
 	_transport_cycle_start = jack_transport_cycle_start;
 	_client_timeout_msecs = client_timeout;
 	_timeout_count = 0;
@@ -1783,28 +1808,28 @@ jack_engine_t::jack_engine_new (int realtime, int rtpriority, int do_mlock, int 
 
 	if (pipe (_cleanup_fifo)) {
 		jack_error ("cannot create cleanup FIFOs (%s)", strerror (errno));
-		return NULL;
+		throw std::exception();
 	}
 
 	if (fcntl (_cleanup_fifo[0], F_SETFL, O_NONBLOCK)) {
 		jack_error ("cannot set O_NONBLOCK on cleanup read FIFO (%s)", strerror (errno));
-		return NULL;
+		throw std::exception();
 	}
 
 	if (fcntl (_cleanup_fifo[1], F_SETFL, O_NONBLOCK)) {
 		jack_error ("cannot set O_NONBLOCK on cleanup write FIFO (%s)", strerror (errno));
-		return NULL;
+		throw std::exception();
 	}
 
-	_client_activation_counts_init[0] = malloc( sizeof(_Atomic_word) * JACK_MAX_CLIENTS );
-	_client_activation_counts_init[1] = malloc( sizeof(_Atomic_word) * JACK_MAX_CLIENTS );
+	_client_activation_counts_init[0] = (_Atomic_word *) malloc( sizeof(_Atomic_word) * JACK_MAX_CLIENTS );
+	_client_activation_counts_init[1] = (_Atomic_word *) malloc( sizeof(_Atomic_word) * JACK_MAX_CLIENTS );
 	for( i=0; i<JACK_MAX_CLIENTS; i++ ) {
 		_client_activation_counts_init[0][i] = 0;
 		_client_activation_counts_init[1][i] = 0;
 	}
 
-	_port_activation_counts_init[0] = malloc( sizeof(_Atomic_word) * _port_max );
-	_port_activation_counts_init[1] = malloc( sizeof(_Atomic_word) * _port_max );
+	_port_activation_counts_init[0] = (_Atomic_word *) malloc( sizeof(_Atomic_word) * _port_max );
+	_port_activation_counts_init[1] = (_Atomic_word *) malloc( sizeof(_Atomic_word) * _port_max );
 
 	_external_client_cnt = 0;
 
@@ -1815,14 +1840,14 @@ jack_engine_t::jack_engine_new (int realtime, int rtpriority, int do_mlock, int 
 			   &_control_shm)) {
 		jack_error ("cannot create engine control shared memory "
 			    "segment (%s)", strerror (errno));
-		return NULL;
+		throw std::exception();
 	}
 
 	if (jack_attach_shm (&_control_shm)) {
 		jack_error ("cannot attach to engine control shared memory"
 			    " (%s)", strerror (errno));
 		jack_destroy_shm (&_control_shm);
-		return NULL;
+		throw std::exception();
 	}
 
 	_control = (jack_control_t *)
@@ -1878,7 +1903,7 @@ jack_engine_t::jack_engine_new (int realtime, int rtpriority, int do_mlock, int 
 
 	if (make_sockets (_server_name, _fds) < 0) {
 		jack_error ("cannot create server sockets");
-		return NULL;
+		throw std::exception();
 	}
 
 	_control->port_max = _port_max;
@@ -1940,7 +1965,7 @@ jack_engine_t::jack_engine_new (int realtime, int rtpriority, int do_mlock, int 
 	_servertask = mach_task_self();
 	if (task_get_bootstrap_port(_servertask, &_bp)){
 		jack_error("Jackd: Can't find bootstrap mach port");
-		return NULL;
+		throw std::exception();
         }
         _portnum = 0;
 #endif /* JACK_USE_MACH_THREADS */
@@ -1977,9 +2002,8 @@ jack_engine_t::jack_engine_new (int realtime, int rtpriority, int do_mlock, int 
 	_graph_wait_fd = jack_get_fifo_fd (0);
 
 	jack_client_create_thread (NULL, &_server_thread, 0, FALSE,
-				   &jack_server_thread, engine);
+				   jack_server_thread_aux, this);
 
-	return engine;
 }
 
 void
@@ -2002,6 +2026,11 @@ jack_engine_t::jack_engine_delay ( float delayed_usecs)
 	jack_deliver_event_to_all (&event);
 }
 
+void
+jack_engine_t::jack_engine_delay_aux ( jack_engine_t *engine, float delayed_usecs)
+{
+	engine->jack_engine_delay (delayed_usecs);
+}
 void
 jack_engine_t::jack_inc_frame_time ( jack_nframes_t nframes)
 {
@@ -2029,9 +2058,15 @@ jack_engine_t::jack_inc_frame_time ( jack_nframes_t nframes)
 }
 
 void*
-jack_engine_t::jack_engine_freewheel (void *arg)
+jack_engine_t::jack_engine_freewheel_aux (void *arg)
 {
 	jack_engine_t* engine = (jack_engine_t *) arg;
+	return engine->jack_engine_freewheel ();
+}
+
+void*
+jack_engine_t::jack_engine_freewheel ()
+{
 	jack_client_internal_t* client;
 
 	VERBOSE (this, "freewheel thread starting ...");
@@ -2096,7 +2131,7 @@ jack_engine_t::jack_start_freewheeling ( jack_client_id_t client_id)
 	jack_deliver_event_to_all (&event);
 	
 	if (jack_client_create_thread (NULL, &_freewheel_thread, 0, FALSE,
-				       jack_engine_freewheel, this)) {
+				       jack_engine_freewheel_aux, this)) {
 		jack_error ("could not start create freewheel thread");
 		return -1;
 	}
@@ -2323,9 +2358,14 @@ jack_engine_t::jack_engine_driver_exit ()
 	_driver = NULL;
 }
 
+void
+jack_engine_t::jack_engine_driver_exit_aux (jack_engine_t *engine)
+{
+	engine->jack_engine_driver_exit ();
+}
+
 int
-jack_engine_t::jack_run_cycle ( jack_nframes_t nframes,
-		float delayed_usecs)
+jack_engine_t::jack_run_cycle (jack_nframes_t nframes, float delayed_usecs)
 {
 	jack_nframes_t left;
 	jack_nframes_t b_size = _control->buffer_size;
@@ -2395,13 +2435,15 @@ jack_engine_t::jack_run_cycle ( jack_nframes_t nframes,
 	return 0;
 }
 
-void 
-jack_engine_t::jack_engine_delete ()
+int
+jack_engine_t::jack_run_cycle_aux (jack_engine_t *engine, jack_nframes_t nframes, float delayed_usecs)
+{
+	return engine->jack_run_cycle (nframes, delayed_usecs);
+}
+
+jack_engine_t::~jack_engine_t ()
 {
 	int i;
-
-	if (engine == NULL)
-		return;
 
 	VERBOSE (this, "starting server engine shutdown");
 
@@ -2476,8 +2518,6 @@ jack_engine_t::jack_engine_delete ()
 	free (_port_activation_counts_init[0] );
 	free (_port_activation_counts_init[1] );
 	free (_internal_ports);
-
-	free (engine);
 
 	jack_messagebuffer_exit();
 }
@@ -3046,7 +3086,7 @@ jack_engine_t::jack_rechain_graph ()
 
                                 for( cnode=own_port->connections; cnode; cnode=jack_slist_next(cnode) )
                                 {
-                                        jack_connection_internal_t *conn = cnode->data;
+                                        jack_connection_internal_t *conn = (jack_connection_internal_t *) cnode->data;
                                         jack_port_internal_t *other_port = conn->source;
 
                                         VERBOSE (this, "checking port %s...", other_port->shared->name );

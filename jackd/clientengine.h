@@ -27,10 +27,10 @@ jack_client_is_internal (jack_client_internal_t *client)
 		(client->control->type == ClientDriver);
 }
 
-static inline char *
+static inline const char *
 jack_client_state_name (jack_engine_t *engine, jack_client_internal_t *client)
 {
-	static char *client_state_names[] = {
+	static const char *client_state_names[] = {
 		"Not triggered",
 		"Triggered",
 		"Signaled",

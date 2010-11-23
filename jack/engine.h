@@ -75,13 +75,13 @@ struct jack_engine_t {
     JSList                *_driver_params;
 
     /* these are "callbacks" made by the driver backend */
-    int  (*_set_buffer_size) (struct _jack_engine *, jack_nframes_t frames);
-    int  (*_set_sample_rate) (struct _jack_engine *, jack_nframes_t frames);
-    int  (*_run_cycle)	    (struct _jack_engine *, jack_nframes_t nframes,
+    int  (*_set_buffer_size) (jack_engine_t *, jack_nframes_t frames);
+    int  (*_set_sample_rate) (jack_engine_t *, jack_nframes_t frames);
+    int  (*_run_cycle)	    (jack_engine_t *, jack_nframes_t nframes,
 			     float delayed_usecs);
-    void (*_delay)	    (struct _jack_engine *, float delayed_usecs);
-    void (*_transport_cycle_start) (struct _jack_engine *, jack_time_t time);
-    void (*_driver_exit)     (struct _jack_engine *);
+    void (*_delay)	    (jack_engine_t *, float delayed_usecs);
+    void (*_transport_cycle_start) (jack_engine_t *, jack_time_t time);
+    void (*_driver_exit)     (jack_engine_t *);
     jack_time_t (*_get_microseconds)(void);
     /* "private" sections starts here */
 
@@ -239,6 +239,9 @@ jack_resize_port_segment (jack_port_type_id_t ptid,
 int
 jack_driver_buffer_size (jack_nframes_t nframes);
 
+static int
+jack_driver_buffer_size_aux (jack_engine_t *engine, jack_nframes_t nframes);
+
 /* handle client SetBufferSize request */
 int
 jack_set_buffer_size_request (jack_nframes_t nframes);
@@ -251,9 +254,9 @@ jack_set_buffer_size_request (jack_nframes_t nframes);
 */
 
 #ifdef HAVE_CLOCK_GETTIME
-const int system_clock_monotonic;
+static const int system_clock_monotonic;
 #else
-const int system_clock_monotonic;
+static const int system_clock_monotonic;
 #endif
 
 int
@@ -291,8 +294,11 @@ jack_stop_watchdog ();
 
 #else
 
+static void *
+jack_watchdog_thread_aux (void *arg);
+
 void *
-jack_watchdog_thread (void *arg);
+jack_watchdog_thread ();
 
 int
 jack_start_watchdog ();
@@ -313,12 +319,20 @@ jack_engine_load_driver (jack_driver_desc_t * driver_desc,
 			 JSList * driver_params);
 
 
+/* some wrapped callbacks here.
+ *
+ */
+
+static int
+jack_set_sample_rate_aux (jack_engine_t *engine, jack_nframes_t nframes);
+
 /* perform internal or external client request
  *
  * reply_fd is NULL for internal requests
  */
 void
 do_request (jack_request_t *req, int *reply_fd);
+
 
 int
 internal_client_request (void* ptr, jack_request_t *request);
@@ -331,22 +345,31 @@ handle_client_ack_connection (int client_fd);
 
 
 void *
-jack_server_thread (void *arg);
+jack_server_thread ();
 
+static void *
+jack_server_thread_aux (void *arg);
 
 jack_engine_t   (int realtime, int rtpriority, int do_mlock, int do_unlock,
 		 const char *server_name, int temporary, int verbose,
 		 int client_timeout, unsigned int port_max, pid_t wait_pid,
 		 jack_nframes_t frame_time_offset, int nozombies, int timeout_count_threshold, int jobs, JSList *drivers);
 
+~jack_engine_t ();
+
 void
 jack_engine_delay (float delayed_usecs);
+
+static void
+jack_engine_delay_aux (jack_engine_t *engine, float delayed_usecs);
 
 inline void
 jack_inc_frame_time (jack_nframes_t nframes);
 
 void*
-jack_engine_freewheel (void *arg);
+jack_engine_freewheel ();
+static void*
+jack_engine_freewheel_aux (void *arg);
 
 int
 jack_start_freewheeling (jack_client_id_t client_id);
@@ -364,9 +387,15 @@ jack_run_one_cycle (jack_nframes_t nframes,
 void
 jack_engine_driver_exit ();
 
+static void
+jack_engine_driver_exit_aux (jack_engine_t *engine);
+
 int
 jack_run_cycle (jack_nframes_t nframes,
 		float delayed_usecs);
+
+static int
+jack_run_cycle_aux (jack_engine_t *engine, jack_nframes_t nframes, float delayed_usecs);
 
 void 
 jack_engine_delete ();
@@ -415,11 +444,11 @@ jack_compute_all_port_total_latencies ();
 void
 jack_sort_graph ();
 
-int 
+static int 
 jack_client_sort (jack_client_internal_t *a, jack_client_internal_t *b);
 
 /* transitive closure of the relation expressed by the sortfeeds lists. */
-int
+static int
 jack_client_feeds_transitive (jack_client_internal_t *source,
 			      jack_client_internal_t *dest );
 
@@ -709,8 +738,9 @@ void
 jack_transport_cycle_end ();
 
 /* driver callback at start of cycle */
-void 
-jack_transport_cycle_start (jack_time_t time) ;
+static void 
+jack_transport_cycle_start (jack_engine_t *engine, jack_time_t time) ;
+
 /* on SetSyncTimeout request */
 int	
 jack_transport_set_sync_timeout (jack_time_t usecs);

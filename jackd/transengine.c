@@ -515,7 +515,7 @@ jack_engine_t::jack_transport_cycle_end ()
 
 /* driver callback at start of cycle */
 void 
-jack_engine_t::jack_transport_cycle_start (jack_time_t time)
+jack_engine_t::jack_transport_cycle_start (jack_engine_t *engine, jack_time_t time)
 {
 	engine->control->current_time.usecs = time;
 }
