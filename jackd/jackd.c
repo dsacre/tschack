@@ -165,7 +165,7 @@ jack_main (jack_driver_desc_t * driver_desc, JSList * driver_params)
 		goto error;
 	}
 
-	if (engine->driver->start (engine->driver) != 0) {
+	if (engine->_driver->start (engine->_driver) != 0) {
 		jack_error ("cannot start driver");
 		goto error;
 	}

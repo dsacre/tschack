@@ -38,7 +38,7 @@ jack_client_state_name (jack_engine_t *engine, jack_client_internal_t *client)
 		"Finished"
 	};
 
-	jack_client_state_t state = engine->control->per_client[client->control->id].state;
+	jack_client_state_t state = engine->_control->per_client[client->control->id].state;
 	return client_state_names[state];
 }
 

@@ -407,7 +407,7 @@ jack_client_alloc_internal (jack_client_control_t *cc, jack_engine_t* engine)
 	client = jack_client_alloc ();
 
 	client->control = cc;
-	client->engine = engine->control;
+	client->engine = engine->_control;
 	
 	pthread_mutex_init( &client->process_mutex, NULL );
 	pthread_cond_init( &client->process_wakeup, NULL );
@@ -419,8 +419,8 @@ jack_client_alloc_internal (jack_client_control_t *cc, jack_engine_t* engine)
 	}
 	client->process_pipe_fd = client->process_pipe[0];
 	client->n_port_types = client->engine->n_port_types;
-	client->port_segment = &engine->port_segment[0];
-	strcpy( client->fifo_prefix, engine->fifo_prefix );
+	client->port_segment = &engine->_port_segment[0];
+	strcpy( client->fifo_prefix, engine->_fifo_prefix );
 
 	client->pollfd[PROCESS_PIPE_INDEX].events =
 		POLLIN|POLLERR|POLLHUP|POLLNVAL;

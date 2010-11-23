@@ -70,7 +70,7 @@ struct jack_engine_t {
     jack_control_t        *_control;
 
     JSList                *_drivers;
-    jack_driver_t   *driver;
+    jack_driver_t   *_driver;
     jack_driver_desc_t    *_driver_desc;
     JSList                *_driver_params;
 
@@ -717,14 +717,14 @@ jack_transport_set_sync_timeout (jack_time_t usecs);
 };
 
 
-#define jack_rdlock_graph(e) { DEBUG ("acquiring graph read lock"); if (pthread_rwlock_rdlock (&e->client_lock)) abort(); }
-#define jack_lock_graph(e) { DEBUG ("acquiring graph write lock"); if (pthread_rwlock_wrlock (&e->client_lock)) abort(); }
+#define jack_rdlock_graph(e) { DEBUG ("acquiring graph read lock"); if (pthread_rwlock_rdlock (&e->_client_lock)) abort(); }
+#define jack_lock_graph(e) { DEBUG ("acquiring graph write lock"); if (pthread_rwlock_wrlock (&e->_client_lock)) abort(); }
 #define jack_try_rdlock_graph(e) pthread_rwlock_tryrdlock (&e->client_lock)
-#define jack_unlock_graph(e) { DEBUG ("release graph lock"); if (pthread_rwlock_unlock (&e->client_lock)) abort(); }
+#define jack_unlock_graph(e) { DEBUG ("release graph lock"); if (pthread_rwlock_unlock (&e->_client_lock)) abort(); }
 
-#define jack_trylock_problems(e) pthread_mutex_trylock (&e->problem_lock)
-#define jack_lock_problems(e) { DEBUG ("acquiring problem lock"); if (pthread_mutex_lock (&e->problem_lock)) abort(); }
-#define jack_unlock_problems(e) { DEBUG ("release problem lock"); if (pthread_mutex_unlock (&e->problem_lock)) abort(); }
+#define jack_trylock_problems(e) pthread_mutex_trylock (&e->_problem_lock)
+#define jack_lock_problems(e) { DEBUG ("acquiring problem lock"); if (pthread_mutex_lock (&e->_problem_lock)) abort(); }
+#define jack_unlock_problems(e) { DEBUG ("release problem lock"); if (pthread_mutex_unlock (&e->_problem_lock)) abort(); }
 
 #if 0
 static inline void jack_rdlock_graph (jack_engine_t* engine) {
