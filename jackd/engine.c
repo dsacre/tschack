@@ -464,7 +464,7 @@ jack_engine_t::jack_driver_buffer_size ( jack_nframes_t nframes)
 	/* update shared client copy of nframes */
 	jack_lock_graph (this);
 	for (node = _clients; node; node = jack_slist_next (node)) {
-		jack_client_internal_t *client = node->data;
+		jack_client_internal_t *client = (jack_client_internal_t *) node->data;
 		client->control->nframes = nframes;
 	}
 	jack_unlock_graph (this);
@@ -750,7 +750,7 @@ jack_engine_t::jack_engine_process ( jack_nframes_t nframes)
 		ctl->finished_at = 0;
 
 		for( pnode = client->ports_rt[curr_chain]; pnode; pnode=jack_slist_next(pnode) ) {
-		  jack_port_internal_t *port = pnode->data;
+		  jack_port_internal_t *port = (jack_port_internal_t *) pnode->data;
 		  port->shared->activation_count = _port_activation_counts_init[curr_chain][port->shared->id];
 		}
 
@@ -914,7 +914,7 @@ jack_engine_t::jack_start_watchdog ()
 		watchdog_priority = max_priority;
 	
 	if (jack_client_create_thread (NULL, &_watchdog_thread, watchdog_priority,
-				       TRUE, jack_watchdog_thread, engine)) {
+				       TRUE, jack_watchdog_thread, this)) {
 		jack_error ("cannot start watchdog thread");
 		return -1;
 	}
@@ -962,7 +962,7 @@ jack_engine_t::jack_load_driver ( jack_driver_desc_t * driver_desc)
 		goto fail;
 	}
 
-	info->initialize = dlsym (info->handle, "driver_initialize");
+	info->initialize = (jack_driver_t* (*)(jack_client_t*, const JSList*)) dlsym (info->handle, "driver_initialize");
 
 	if ((errstr = dlerror ()) != 0) {
 		jack_error ("no initialize function in shared object %s\n",
@@ -1030,7 +1030,7 @@ jack_engine_t::jack_engine_load_driver (
 	}
 
 	driver->handle = info->handle;
-	driver->finish = info->finish;
+	driver->finish = (void (*)(jack_driver_t*)) info->finish;
 	driver->internal_client = client;
 	free (info);
 
