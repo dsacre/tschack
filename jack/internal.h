@@ -139,8 +139,8 @@ const char* jack_clock_source_name (jack_timer_type_t);
 
 #define JACK_MAX_CLIENTS 128
 
-typedef struct _jack_engine  jack_engine_t;
-typedef struct _jack_request jack_request_t;
+struct jack_request_t;
+struct jack_engine_t;
 
 typedef void * dlhandle;
 
@@ -269,7 +269,7 @@ typedef enum {
 
 
 /* JACK client shared memory data structure. */
-typedef volatile struct {
+struct jack_client_control_t {
 
     volatile jack_client_id_t id;         /* w: engine r: engine and client */
     volatile jack_client_id_t uid;        /* w: engine r: engine and client */
@@ -315,7 +315,7 @@ typedef volatile struct {
     volatile uint8_t	thread_cb_cbset;
     volatile uint8_t	session_cbset;
 
-} POST_PACKED_STRUCTURE jack_client_control_t;
+} POST_PACKED_STRUCTURE;
 
 typedef struct {
     
@@ -400,7 +400,7 @@ typedef enum {
 	SessionReply = 31
 } RequestType;
 
-struct _jack_request {
+struct jack_request_t {
     
     //RequestType type;
     uint32_t type;
@@ -463,7 +463,7 @@ struct _jack_request {
  * It's here because its not part of the engine structure.
  */
 
-typedef struct _jack_client_internal {
+struct jack_client_internal_t {
 
     jack_client_control_t *control;
 
@@ -495,16 +495,16 @@ typedef struct _jack_client_internal {
 #endif /* JACK_USE_MACH_THREADS */
    
     jack_client_t *private_client;
-} jack_client_internal_t;
+};
 
-typedef struct _jack_thread_arg {
+struct jack_thread_arg_t {
 	jack_client_t* client;
 	void* (*work_function)(void*);
 	int priority;
 	int realtime;
 	void* arg;
 	pid_t cap_pid;
-} jack_thread_arg_t;
+};
 
 extern int  jack_client_handle_port_connection (jack_client_t *client,
 						jack_event_t *event);

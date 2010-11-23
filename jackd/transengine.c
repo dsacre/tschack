@@ -27,7 +27,7 @@
 #include <jack/internal.h>
 #include <jack/engine.h>
 #include <jack/messagebuffer.h>
-#include "transengine.h"
+//#include "transengine.h"
 
 /********************** internal functions **********************/
 
@@ -35,7 +35,7 @@
  *
  *   precondition: caller holds the graph lock. */
 static inline void
-jack_sync_poll_new (jack_engine_t *engine, jack_client_internal_t *client)
+jack_engine_t::jack_sync_poll_new (jack_client_internal_t *client)
 {
 	/* force sync_cb callback to run in its first cycle */
 	engine->control->sync_time_left = engine->control->sync_timeout;
@@ -59,8 +59,7 @@ jack_sync_poll_new (jack_engine_t *engine, jack_client_internal_t *client)
  *
  *   precondition: caller holds the graph lock. */
 static inline void
-jack_sync_poll_deactivate (jack_engine_t *engine,
-			   jack_client_internal_t *client)
+jack_engine_t::jack_sync_poll_deactivate (jack_client_internal_t *client)
 {
 	if (client->control->sync_poll) {
 		client->control->sync_poll = 0;
@@ -78,7 +77,7 @@ jack_sync_poll_deactivate (jack_engine_t *engine,
  *
  *   precondition: caller holds the graph lock. */
 static void
-jack_sync_poll_stop (jack_engine_t *engine)
+jack_engine_t::jack_sync_poll_stop ()
 {
 	JSList *node;
 	long poll_count = 0;		/* count sync_poll clients */
@@ -107,7 +106,7 @@ jack_sync_poll_stop (jack_engine_t *engine)
  *
  *   precondition: caller holds the graph lock. */
 static void
-jack_sync_poll_start (jack_engine_t *engine)
+jack_engine_t::jack_sync_poll_start ()
 {
 	JSList *node;
 	long sync_count = 0;		/* count slow-sync clients */
@@ -133,7 +132,7 @@ jack_sync_poll_start (jack_engine_t *engine)
 
 /* check for sync timeout */
 static inline int
-jack_sync_timeout (jack_engine_t *engine)
+jack_engine_t::jack_sync_timeout ()
 {
 	jack_control_t *ectl = engine->control;
 	jack_time_t buf_usecs =
@@ -157,7 +156,7 @@ jack_sync_timeout (jack_engine_t *engine)
 
 /* driver callback */
 int
-jack_set_sample_rate (jack_engine_t *engine, jack_nframes_t nframes)
+jack_engine_t::jack_set_sample_rate (jack_nframes_t nframes)
 {
 	jack_control_t *ectl = engine->control;
 
@@ -168,7 +167,7 @@ jack_set_sample_rate (jack_engine_t *engine, jack_nframes_t nframes)
 
 /* on ResetTimeBaseClient request */
 int
-jack_timebase_reset (jack_engine_t *engine, jack_client_id_t client_id)
+jack_engine_t::jack_timebase_reset (jack_client_id_t client_id)
 {
 	int ret;
 	struct _jack_client_internal *client;
@@ -195,8 +194,7 @@ jack_timebase_reset (jack_engine_t *engine, jack_client_id_t client_id)
 
 /* on SetTimeBaseClient request */
 int
-jack_timebase_set (jack_engine_t *engine,
-		   jack_client_id_t client_id, int conditional)
+jack_engine_t::jack_timebase_set (jack_client_id_t client_id, int conditional)
 {
 	int ret = 0;
 	struct _jack_client_internal *client;
@@ -247,7 +245,7 @@ jack_timebase_set (jack_engine_t *engine,
  *
  *   precondition: caller holds the graph lock. */
 void
-jack_transport_activate (jack_engine_t *engine, jack_client_internal_t *client)
+jack_engine_t::jack_transport_activate (jack_client_internal_t *client)
 {
 	if (client->control->is_slowsync) {
 		assert(!client->control->active_slowsync);
@@ -263,7 +261,7 @@ jack_transport_activate (jack_engine_t *engine, jack_client_internal_t *client)
 
 /* for engine initialization */
 void
-jack_transport_init (jack_engine_t *engine)
+jack_engine_t::jack_transport_init ()
 {
 	jack_control_t *ectl = engine->control;
 
@@ -289,8 +287,7 @@ jack_transport_init (jack_engine_t *engine)
  *
  * precondition: caller holds the graph lock */
 void
-jack_transport_client_exit (jack_engine_t *engine,
-			    jack_client_internal_t *client)
+jack_engine_t::jack_transport_client_exit (jack_client_internal_t *client)
 {
 	if (client == engine->timebase_client) {
 		if (client->control->dead) {
@@ -313,7 +310,7 @@ jack_transport_client_exit (jack_engine_t *engine,
 
 /* when a new client is being created */
 void	
-jack_transport_client_new (jack_client_internal_t *client)
+jack_engine_t::jack_transport_client_new (jack_client_internal_t *client)
 {
 	client->control->is_timebase = 0;
 	client->control->timebase_new = 0;
@@ -337,8 +334,7 @@ jack_transport_client_new (jack_client_internal_t *client)
 
 /* on ResetSyncClient request */
 int
-jack_transport_client_reset_sync (jack_engine_t *engine,
-				  jack_client_id_t client_id)
+jack_engine_t::jack_transport_client_reset_sync (jack_client_id_t client_id)
 {
 	int ret;
 	jack_client_internal_t *client;
@@ -362,8 +358,7 @@ jack_transport_client_reset_sync (jack_engine_t *engine,
 
 /* on SetSyncClient request */
 int
-jack_transport_client_set_sync (jack_engine_t *engine,
-				jack_client_id_t client_id)
+jack_engine_t::jack_transport_client_set_sync (jack_client_id_t client_id)
 {
 	int ret;
 	jack_client_internal_t *client;
@@ -409,7 +404,7 @@ jack_transport_client_set_sync (jack_engine_t *engine,
  * precondition: caller holds the graph lock.
  */
 void
-jack_transport_cycle_end (jack_engine_t *engine)
+jack_engine_t::jack_transport_cycle_end ()
 {
 	jack_control_t *ectl = engine->control;
 	transport_command_t cmd;	/* latest transport command */
@@ -520,15 +515,14 @@ jack_transport_cycle_end (jack_engine_t *engine)
 
 /* driver callback at start of cycle */
 void 
-jack_transport_cycle_start (jack_engine_t *engine, jack_time_t time)
+jack_engine_t::jack_transport_cycle_start (jack_time_t time)
 {
 	engine->control->current_time.usecs = time;
 }
 
 /* on SetSyncTimeout request */
 int	
-jack_transport_set_sync_timeout (jack_engine_t *engine,
-				 jack_time_t usecs)
+jack_engine_t::jack_transport_set_sync_timeout (jack_time_t usecs)
 {
 	engine->control->sync_timeout = usecs;
 	VERBOSE (engine, "new sync timeout: %8.6f secs",

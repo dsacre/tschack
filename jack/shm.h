@@ -90,7 +90,7 @@ extern void jack_shm_copy_to_registry (jack_shm_info_t*,
 extern void jack_release_shm_info (jack_shm_registry_index_t);
 
 static inline char* jack_shm_addr (jack_shm_info_t* si) {
-	return si->attached_at;
+	return (char *) si->attached_at;
 }
 
 /* here beginneth the API */

@@ -31,7 +31,7 @@
 #include <jack/pool.h>
 #include <jack/port.h>
 #include <jack/midiport.h>
-#include <jack/jslist.h>
+//#include <jack/jslist.h>
 #include <jack/intsimd.h>
 
 #include "local.h"
@@ -47,27 +47,29 @@ static void    jack_audio_port_mixdown (jack_port_t *port,
  * internal clients they reside within jackd; for external clients in
  * the application process. */
 jack_port_functions_t jack_builtin_audio_functions = {
-	.buffer_init    = jack_generic_buffer_init,
-	.mixdown = jack_audio_port_mixdown, 
+	&jack_generic_buffer_init,
+	&jack_audio_port_mixdown, 
 };
 
 extern jack_port_functions_t jack_builtin_midi_functions;
 
 jack_port_functions_t jack_builtin_NULL_functions = {
-	.buffer_init    = jack_generic_buffer_init,
-	.mixdown = NULL, 
+	jack_generic_buffer_init,
+	NULL
 };
 
+#if 0
 /* Only the Audio and MIDI port types are currently built in. */
 jack_port_type_info_t jack_builtin_port_types[] = {
-	{ .type_name = JACK_DEFAULT_AUDIO_TYPE, 
-	  .buffer_scale_factor = 1,
+	{ {JACK_DEFAULT_AUDIO_TYPE}, 
+	  1,
 	},
-	{ .type_name = JACK_DEFAULT_MIDI_TYPE, 
-	  .buffer_scale_factor = 1,
+	{ {JACK_DEFAULT_MIDI_TYPE}, 
+	  1,
 	},
-	{ .type_name = "", }
+	{ {""} }
 };
+#endif
 
 /* these functions have been taken from libDSP X86.c  -jl */
 
@@ -462,7 +464,7 @@ jack_port_by_id (jack_client_t *client, jack_port_id_t id)
 	jack_port_t* port;
 	int need_free = FALSE;
 	for (node = client->ports_ext; node; node = jack_slist_next (node)) {
-		port = node->data;
+		port = (jack_port_t *) node->data;
 		if (port->shared->id == id) { // Found port, return the cached structure
 			return port;
 		}
@@ -501,7 +503,7 @@ jack_port_by_name (jack_client_t *client,  const char *port_name)
 	JSList *node;
 	jack_port_t* port;
 	for (node = client->ports_ext; node; node = jack_slist_next (node)) {
-		port = node->data;
+		port = (jack_port_t *) node->data;
 		if (jack_port_name_equals (port->shared, port_name)) {
 			/* Found port, return the cached structure. */
 			return port;
@@ -842,7 +844,7 @@ jack_audio_port_mixdown (jack_port_t *port, jack_nframes_t nframes)
 
 	node = port->connections_rt[port->client->engine->current_process_chain];
 	input = (jack_port_t *) node->data;
-	buffer = port->mix_buffer;
+	buffer = (jack_default_audio_sample_t *) port->mix_buffer;
 
 #ifndef USE_DYNSIMD
 	memcpy (buffer, jack_output_port_buffer (input),
@@ -859,7 +861,7 @@ jack_audio_port_mixdown (jack_port_t *port, jack_nframes_t nframes)
 #ifndef USE_DYNSIMD
 		n = nframes;
 		dst = buffer;
-		src = jack_output_port_buffer (input);
+		src = (jack_default_audio_sample_t *) jack_output_port_buffer (input);
 
 		while (n--) {
 			*dst++ += *src++;

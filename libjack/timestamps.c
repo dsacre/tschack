@@ -61,11 +61,11 @@ jack_dump_timestamps (FILE *out)
 	unsigned long i;
 
 	for (i = 0; i < timestamp_index; ++i) {
-		fprintf (out, "%-.32s %" PRIu64 " %" PRIu64, 
+		fprintf (out, "%-.32s %lu %lu", 
 			 timestamps[i].what, timestamps[i].when,
 			 timestamps[i].when - timestamps[0].when);
 		if (i > 0) {
-			fprintf (out, " %" PRIu64,
+			fprintf (out, " %lu",
 				 timestamps[i].when - timestamps[i-1].when);
 		}
 		fputc ('\n', out);

@@ -25,46 +25,52 @@
 #include <jack/internal.h>
 #include <jack/driver_interface.h>
 
-struct _jack_driver;
-struct _jack_client_internal;
-struct _jack_port_internal;
+struct jack_driver_t;
+struct jack_client_internal_t;
+struct jack_port_internal_t;
 
+struct jack_driver_info_t {
+    jack_driver_t *(*initialize)(jack_client_t*, const JSList *);
+    void           (*finish);
+    char           (*client_name);
+    dlhandle       handle;
+};
 /* Structures is allocated by the engine in local memory to keep track
  * of port buffers and connections. 
  */
-typedef struct {
+struct jack_port_buffer_info_t {
     jack_shm_info_t* shm_info;
     jack_shmsize_t   offset;
-} jack_port_buffer_info_t;
+};
 
 /* The engine keeps an array of these in its local memory. */
-typedef struct _jack_port_internal {
+struct jack_port_internal_t {
     struct _jack_port_shared *shared;
     JSList                   *connections;
     jack_port_buffer_info_t  *buffer_info;
-} jack_port_internal_t;
+};
 
 /* The engine's internal port type structure. */
-typedef struct _jack_port_buffer_list {
+struct jack_port_buffer_list_t {
     pthread_mutex_t          lock;	/* only lock within server */
     JSList	            *freelist;	/* list of free buffers */
     jack_port_buffer_info_t *info;	/* jack_buffer_info_t array */
-} jack_port_buffer_list_t;
+};
 
-typedef struct _jack_reserved_name {
+struct jack_reserved_name_t {
     jack_client_id_t uuid;
     char name[JACK_CLIENT_NAME_SIZE];
-} jack_reserved_name_t;
+};
 
 #define JACKD_WATCHDOG_TIMEOUT 10000
 #define JACKD_CLIENT_EVENT_TIMEOUT 2000
 
 /* The main engine structure in local memory. */
-struct _jack_engine {
+struct jack_engine_t {
     jack_control_t        *control;
 
     JSList                *drivers;
-    struct _jack_driver   *driver;
+    jack_driver_t   *driver;
     jack_driver_desc_t    *driver_desc;
     JSList                *driver_params;
 
@@ -194,16 +200,16 @@ struct _jack_engine {
 
     // methods....
 
-inline int 
+int 
 jack_rolling_interval (jack_time_t period_usecs);
 
 void
 jack_engine_reset_rolling_usecs ();
 
-inline jack_port_type_info_t *
+jack_port_type_info_t *
 jack_port_type_info (jack_port_internal_t *port);
 
-inline jack_port_buffer_list_t *
+jack_port_buffer_list_t *
 jack_port_buffer_list (jack_port_internal_t *port);
 
 int
@@ -245,13 +251,13 @@ jack_set_buffer_size_request (jack_nframes_t nframes);
 */
 
 #ifdef HAVE_CLOCK_GETTIME
-const int system_clock_monotonic = 1;
+const int system_clock_monotonic;
 #else
-const int system_clock_monotonic = 0;
+const int system_clock_monotonic;
 #endif
 
 int
-linux_poll_bug_encountered (jack_engine_t* engine, jack_time_t then, jack_time_t *required);
+linux_poll_bug_encountered (jack_time_t then, jack_time_t *required);
 #endif
 
 
@@ -328,8 +334,7 @@ void *
 jack_server_thread (void *arg);
 
 
-jack_engine_t *
-jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
+jack_engine_t   (int realtime, int rtpriority, int do_mlock, int do_unlock,
 		 const char *server_name, int temporary, int verbose,
 		 int client_timeout, unsigned int port_max, pid_t wait_pid,
 		 jack_nframes_t frame_time_offset, int nozombies, int timeout_count_threshold, int jobs, JSList *drivers);
@@ -344,20 +349,20 @@ void*
 jack_engine_freewheel (void *arg);
 
 int
-jack_start_freewheeling (jack_engine_t* engine, jack_client_id_t client_id);
+jack_start_freewheeling (jack_client_id_t client_id);
 
 int
-jack_stop_freewheeling (jack_engine_t* engine, int engine_exiting);
+jack_stop_freewheeling (int engine_exiting);
 
 int
-jack_check_client_status (jack_engine_t* engine);
+jack_check_client_status ();
 
 int
 jack_run_one_cycle (jack_nframes_t nframes,
 		    float delayed_usecs);
 
 void
-jack_engine_driver_exit (jack_engine_t* engine);
+jack_engine_driver_exit ();
 
 int
 jack_run_cycle (jack_nframes_t nframes,
@@ -402,7 +407,7 @@ jack_get_port_total_latency (jack_port_internal_t *port, int hop_count,
 			     int toward_port);
 
 void
-jack_compute_port_total_latency (jack_engine_t* engine, jack_port_shared_t* port);
+jack_compute_port_total_latency (jack_port_shared_t* port);
 
 void
 jack_compute_all_port_total_latencies ();
@@ -504,6 +509,211 @@ jack_wake_server_thread ();
 void
 jack_engine_signal_problems ();
 
+
+/*
+ * methods from client engine now.
+ */
+
+
+void
+jack_client_disconnect_ports (
+			      jack_client_internal_t *client);
+
+int
+jack_client_do_deactivate (
+			   jack_client_internal_t *client, int sort_graph);
+
+static int
+jack_load_client ( jack_client_internal_t *client,
+		  const char *so_name);
+
+static void
+jack_client_unload (jack_client_internal_t *client);
+
+static void
+jack_zombify_client ( jack_client_internal_t *client);
+
+void
+jack_remove_client ( jack_client_internal_t *client);
+
+int
+jack_check_clients ( int with_timeout_check);
+
+void
+jack_remove_clients ( int* exit_freewheeling_when_done);
+
+jack_client_internal_t *
+jack_client_by_name ( const char *name);
+
+static jack_client_id_t
+jack_client_id_by_name ( const char *name);
+
+jack_client_internal_t *
+jack_client_internal_by_id ( jack_client_id_t id);
+
+int
+jack_client_name_reserved(  const char *name );
+
+/* generate a unique client name
+ *
+ * returns 0 if successful, updates name in place
+ */
+static inline int
+jack_generate_unique_name ( char *name);
+
+static int
+jack_client_name_invalid ( char *name,
+			  jack_options_t options, jack_status_t *status);
+
+static jack_client_id_t
+jack_get_client_id( jack_engine_t *engine );
+
+/* Set up the engine's client internal and control structures for both
+ * internal and external clients. */
+static jack_client_internal_t *
+jack_setup_client_control ( int fd,
+			   ClientType type, const char *name, jack_client_id_t uuid);
+
+static void
+jack_ensure_uuid_unique ( jack_client_id_t uuid);
+
+/* set up all types of clients */
+static jack_client_internal_t *
+setup_client ( ClientType type, char *name, jack_client_id_t uuid,
+	      jack_options_t options, jack_status_t *status, int client_fd,
+	      const char *object_path, const char *object_data);
+
+jack_client_internal_t *
+jack_create_driver_client ( char *name);
+
+static jack_status_t
+handle_unload_client ( jack_client_id_t id);
+
+static char *
+jack_get_reserved_name(  jack_client_id_t uuid );
+
+int
+jack_client_create ( int client_fd);
+
+int
+jack_client_activate ( jack_client_id_t id);
+
+int
+jack_client_deactivate ( jack_client_id_t id);
+
+jack_client_internal_t *
+jack_get_client_for_fd ( int fd);
+
+int
+jack_mark_client_socket_error ( int fd);
+
+void
+jack_client_delete ( jack_client_internal_t *client);
+
+void
+jack_intclient_handle_request ( jack_request_t *req);
+
+void
+jack_intclient_load_request ( jack_request_t *req);
+
+void
+jack_intclient_name_request ( jack_request_t *req);
+
+void
+jack_intclient_unload_request ( jack_request_t *req);
+
+
+
+
+
+/*
+ * transportengine.c
+ */
+
+/* initiate polling a new slow-sync client
+ *
+ *   precondition: caller holds the graph lock. */
+static inline void
+jack_sync_poll_new ( jack_client_internal_t *client);
+
+/* stop polling a specific slow-sync client
+ *
+ *   precondition: caller holds the graph lock. */
+static inline void
+jack_sync_poll_deactivate (jack_client_internal_t *client);
+
+/* stop polling all the slow-sync clients
+ *
+ *   precondition: caller holds the graph lock. */
+static void
+jack_sync_poll_stop ();
+
+/* start polling all the slow-sync clients
+ *
+ *   precondition: caller holds the graph lock. */
+static void
+jack_sync_poll_start ();
+
+/* check for sync timeout */
+static inline int
+jack_sync_timeout ();
+
+
+/**************** subroutines used by engine.c ****************/
+
+/* driver callback */
+int
+jack_set_sample_rate ( jack_nframes_t nframes);
+
+/* on ResetTimeBaseClient request */
+int
+jack_timebase_reset ( jack_client_id_t client_id);
+
+/* on SetTimeBaseClient request */
+int
+jack_timebase_set (jack_client_id_t client_id, int conditional);
+
+/* for client activation
+ *
+ *   precondition: caller holds the graph lock. */
+void
+jack_transport_activate (jack_client_internal_t *client);
+
+/* for engine initialization */
+void
+jack_transport_init ();
+
+/* when any client exits the graph (either dead or not active)
+ *
+ * precondition: caller holds the graph lock */
+void
+jack_transport_client_exit (jack_client_internal_t *client);
+
+/* when a new client is being created */
+void	
+jack_transport_client_new (jack_client_internal_t *client);
+
+/* on ResetSyncClient request */
+int
+jack_transport_client_reset_sync (jack_client_id_t client_id);
+
+/* on SetSyncClient request */
+int
+jack_transport_client_set_sync (jack_client_id_t client_id);
+
+/* at process cycle end, set transport parameters for the next cycle
+ *
+ * precondition: caller holds the graph lock.
+ */
+void
+jack_transport_cycle_end ();
+
+/* driver callback at start of cycle */
+void 
+jack_transport_cycle_start (jack_time_t time) ;
+/* on SetSyncTimeout request */
+int	
+jack_transport_set_sync_timeout (jack_time_t usecs);
 };
 
 
@@ -555,12 +765,6 @@ typedef struct {
     jack_client_internal_t *dstclient;
 } jack_connection_internal_t;
 
-typedef struct _jack_driver_info {
-    jack_driver_t *(*initialize)(jack_client_t*, const JSList *);
-    void           (*finish);
-    char           (*client_name);
-    dlhandle       handle;
-} jack_driver_info_t;
 
-jack_timer_type_t clock_source = JACK_TIMER_SYSTEM_CLOCK;
+extern jack_timer_type_t clock_source; 
 #endif /* __jack_engine_h__ */

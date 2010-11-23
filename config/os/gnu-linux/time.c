@@ -20,8 +20,8 @@
 */
 
 #include <config.h>
-
-#include <stdint.h>
+#define __STDC_FORMAT_MACROS 1
+#include <inttypes.h>
 
 static jack_time_t __jack_cpu_mhz = 0;
 jack_time_t (*_jack_get_microseconds)(void) = 0;
@@ -150,7 +150,7 @@ jack_get_mhz (void)
 		ret = sscanf(buf, "clock\t: %" SCNu64 "MHz", &mhz);
 #elif defined( __i386__ ) || defined (__hppa__)  || defined (__ia64__) || \
       defined(__x86_64__)
-		ret = sscanf(buf, "cpu MHz         : %" SCNu64, &mhz);
+		ret = sscanf(buf, "cpu MHz         : %lu", &mhz);
 #elif defined( __sparc__ )
 		ret = sscanf(buf, "Cpu0Bogo        : %" SCNu64, &mhz);
 #elif defined( __mc68000__ )

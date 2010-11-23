@@ -43,22 +43,19 @@ typedef struct {
     void *arg;
 } ClockSyncListener;
 
-struct _jack_engine;
-struct _jack_driver;
+struct jack_engine_t;
+struct jack_driver_t;
 
-typedef int       (*JackDriverAttachFunction)(struct _jack_driver *,
-					      struct _jack_engine *);
-typedef int       (*JackDriverDetachFunction)(struct _jack_driver *,
-					      struct _jack_engine *);
-typedef int       (*JackDriverReadFunction)(struct _jack_driver *,
-					    jack_nframes_t nframes);
-typedef int       (*JackDriverWriteFunction)(struct _jack_driver *,
+typedef int       (*JackDriverAttachFunction)(jack_driver_t *, jack_engine_t *);
+typedef int       (*JackDriverDetachFunction)(jack_driver_t *, jack_engine_t *);
+typedef int       (*JackDriverReadFunction)(jack_driver_t *, jack_nframes_t nframes);
+typedef int       (*JackDriverWriteFunction)(jack_driver_t *,
 					     jack_nframes_t nframes);
-typedef int       (*JackDriverNullCycleFunction)(struct _jack_driver *,
+typedef int       (*JackDriverNullCycleFunction)(jack_driver_t *,
 						 jack_nframes_t nframes);
-typedef int       (*JackDriverStopFunction)(struct _jack_driver *);
-typedef int       (*JackDriverStartFunction)(struct _jack_driver *);
-typedef int	  (*JackDriverBufSizeFunction)(struct _jack_driver *,
+typedef int       (*JackDriverStopFunction)(jack_driver_t *);
+typedef int       (*JackDriverStartFunction)(jack_driver_t *);
+typedef int	  (*JackDriverBufSizeFunction)(jack_driver_t *,
 					       jack_nframes_t nframes);
 /* 
    Call sequence summary:
@@ -81,7 +78,7 @@ typedef int	  (*JackDriverBufSizeFunction)(struct _jack_driver *,
      error return from the `wait' function.
 */
 
-typedef struct _jack_driver {
+struct jack_driver_t {
 
 /* The _jack_driver structure fields are included at the beginning of
    each driver-specific structure using the JACK_DRIVER_DECL macro,
@@ -212,8 +209,8 @@ typedef struct _jack_driver {
     jack_time_t period_usecs; \
     jack_time_t last_wait_ust; \
     void *handle; \
-    struct _jack_client_internal * internal_client; \
-    void (*finish)(struct _jack_driver *);\
+    jack_client_internal_t * internal_client; \
+    void (*finish)(jack_driver_t *);\
     JackDriverAttachFunction attach; \
     JackDriverDetachFunction detach; \
     JackDriverReadFunction read; \
@@ -225,7 +222,7 @@ typedef struct _jack_driver {
 
     JACK_DRIVER_DECL			/* expand the macro */
 
-} jack_driver_t;
+};
 
 
 typedef jack_driver_desc_t * (*JackDriverDescFunction) ();
@@ -264,17 +261,17 @@ void jack_driver_unload (jack_driver_t *);
 
 */
 
-struct _jack_driver_nt;
+struct jack_driver_nt_t;
 
-typedef int       (*JackDriverNTAttachFunction)(struct _jack_driver_nt *);
-typedef int       (*JackDriverNTDetachFunction)(struct _jack_driver_nt *);
-typedef int       (*JackDriverNTStopFunction)(struct _jack_driver_nt *);
-typedef int       (*JackDriverNTStartFunction)(struct _jack_driver_nt *);
-typedef int	  (*JackDriverNTBufSizeFunction)(struct _jack_driver_nt *,
+typedef int       (*JackDriverNTAttachFunction)(jack_driver_nt_t *);
+typedef int       (*JackDriverNTDetachFunction)(jack_driver_nt_t *);
+typedef int       (*JackDriverNTStopFunction)(jack_driver_nt_t *);
+typedef int       (*JackDriverNTStartFunction)(jack_driver_nt_t *);
+typedef int	  (*JackDriverNTBufSizeFunction)(jack_driver_nt_t *,
 					       jack_nframes_t nframes);
-typedef int       (*JackDriverNTRunCycleFunction)(struct _jack_driver_nt *);
+typedef int       (*JackDriverNTRunCycleFunction)(jack_driver_nt_t *);
 
-typedef struct _jack_driver_nt {
+struct jack_driver_nt_t {
 
 #define JACK_DRIVER_NT_DECL \
     JACK_DRIVER_DECL \
@@ -295,7 +292,7 @@ typedef struct _jack_driver_nt {
     JACK_DRIVER_NT_DECL
 
 
-} jack_driver_nt_t;
+};
 
 void jack_driver_nt_init   (jack_driver_nt_t * driver);
 void jack_driver_nt_finish (jack_driver_nt_t * driver);

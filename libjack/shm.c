@@ -75,10 +75,13 @@ static void	jack_remove_shm (jack_shm_id_t *id);
 
 /* per-process global data for the SHM interfaces */
 static jack_shm_id_t   registry_id;	/* SHM id for the registry */
-static jack_shm_info_t registry_info = { /* SHM info for the registry */
+static jack_shm_info_t registry_info;
+#if 0
+= { /* SHM info for the registry */
 	.index = JACK_SHM_NULL_INDEX,
 	.attached_at = MAP_FAILED
 };
+#endif
 
 /* pointers to registry header and array */
 static jack_shm_header_t   *jack_shm_header = NULL;
@@ -802,7 +805,7 @@ jack_access_registry (jack_shm_info_t *ri)
 
 	/* set up global pointers */
 	ri->index = JACK_SHM_REGISTRY_INDEX;
-	jack_shm_header = ri->attached_at;
+	jack_shm_header = (jack_shm_header_t *) ri->attached_at;
 	jack_shm_registry = (jack_shm_registry_t *) (jack_shm_header + 1);
 
 	return 0;
@@ -835,7 +838,7 @@ jack_create_registry (jack_shm_info_t *ri)
 
 	/* set up global pointers */
 	ri->index = JACK_SHM_REGISTRY_INDEX;
-	jack_shm_header = ri->attached_at;
+	jack_shm_header = (jack_shm_header_t *) ri->attached_at;
 	jack_shm_registry = (jack_shm_registry_t *) (jack_shm_header + 1);
 
 	/* initialize registry contents */

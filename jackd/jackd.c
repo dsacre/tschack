@@ -148,7 +148,7 @@ jack_main (jack_driver_desc_t * driver_desc, JSList * driver_params)
 
 	/* get the engine/driver started */
 
-	if ((engine = jack_engine_new (realtime, realtime_priority, 
+	if ((engine = new jack_engine_t (realtime, realtime_priority, 
 				       do_mlock, do_unlock, server_name,
 				       temporary, verbose, client_timeout,
 				       port_max, getpid(), frame_time_offset, 
@@ -159,7 +159,7 @@ jack_main (jack_driver_desc_t * driver_desc, JSList * driver_params)
 
 	jack_info ("loading driver ..");
 	
-	if (jack_engine_load_driver (engine, driver_desc, driver_params)) {
+	if (engine->jack_engine_load_driver (driver_desc, driver_params)) {
 		jack_error ("cannot load driver module %s",
 			 driver_desc->name);
 		goto error;
@@ -198,7 +198,7 @@ jack_main (jack_driver_desc_t * driver_desc, JSList * driver_params)
 		
 		switch (sig) {
 		case SIGUSR1:
-			jack_dump_configuration(engine, 1);
+			//jack_dump_configuration(engine, 1);
 			break;
 		case SIGUSR2:
 			/* driver exit */
@@ -219,11 +219,11 @@ jack_main (jack_driver_desc_t * driver_desc, JSList * driver_params)
 		sigprocmask (SIG_UNBLOCK, &signals, 0);
 	}
 	
-	jack_engine_delete (engine);
+	engine->jack_engine_delete ();
 	return 1;
 	
 error:
-	jack_engine_delete (engine);
+	engine->jack_engine_delete ();
 	return -1;
 }
 
@@ -242,7 +242,7 @@ jack_drivers_get_descriptor (JSList * drivers, const char * sofile)
 	if ((driver_dir = getenv("JACK_DRIVER_DIR")) == 0) {
 		driver_dir = ADDON_DIR;
 	}
-	filename = malloc (strlen (driver_dir) + 1 + strlen (sofile) + 1);
+	filename = (char *) malloc (strlen (driver_dir) + 1 + strlen (sofile) + 1);
 	sprintf (filename, "%s/%s", driver_dir, sofile);
 
 	if (verbose) {

@@ -322,7 +322,10 @@ jack_midi_get_lost_event_count(void           *port_buffer)
 	return ((jack_midi_port_info_private_t *) port_buffer)->events_lost;
 }
 
-jack_port_functions_t jack_builtin_midi_functions = {
+jack_port_functions_t jack_builtin_midi_functions;
+#if 0
+= {
 	.buffer_init    = jack_midi_buffer_init,
 	.mixdown = jack_midi_port_mixdown, 
 };
+#endif

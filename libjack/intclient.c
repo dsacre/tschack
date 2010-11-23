@@ -52,7 +52,7 @@ jack_intclient_request(RequestType type, jack_client_t *client,
 		jack_error ("\"%s\" is too long for a shared object name.\n"
 			     "Please use %lu characters or less.",
 			    va->load_name, sizeof (req.x.intclient.path) - 1);
-		*status |= (JackFailure|JackInvalidOption);
+		*status = (jack_status_t) ((*status) | (JackFailure|JackInvalidOption));
 		return 0;
 	}
 
@@ -61,7 +61,7 @@ jack_intclient_request(RequestType type, jack_client_t *client,
 		jack_error ("\"%s\" is too long for internal client init "
 			    "string.\nPlease use %lu characters or less.",
 			    va->load_init, sizeof (req.x.intclient.init) - 1);
-		*status |= (JackFailure|JackInvalidOption);
+		*status = (jack_status_t) ((*status) | (JackFailure|JackInvalidOption));
 		return 0;
 	}
 
@@ -78,7 +78,7 @@ jack_intclient_request(RequestType type, jack_client_t *client,
 
 	jack_client_deliver_request (client, &req);
 
-	*status |= req.status;
+	*status = (jack_status_t) ((*status) | (req.status));
 
 	if (*status & JackFailure)
 		return 0;
@@ -122,7 +122,7 @@ jack_internal_client_handle (jack_client_t *client,
 
 	if (status == NULL)		/* no status from caller? */
 		status = &my_status;	/* use local status word */
-	*status = 0;
+	*status = (jack_status_t) 0;
 
 	memset (&req, 0, sizeof (req));
 	req.type = IntClientHandle;
@@ -130,7 +130,7 @@ jack_internal_client_handle (jack_client_t *client,
 	strncpy (req.x.intclient.name, client_name,
 		 sizeof (req.x.intclient.name));
 
-	*status = jack_client_deliver_request (client, &req);
+	*status = (jack_status_t) jack_client_deliver_request (client, &req);
 
 	return req.x.intclient.id;
 }
@@ -146,11 +146,11 @@ jack_internal_client_load_aux (jack_client_t *client,
 
 	if (status == NULL)		/* no status from caller? */
 		status = &my_status;	/* use local status word */
-	*status = 0;
+	*status = (jack_status_t) 0;
 
 	/* validate parameters */
 	if ((options & ~JackLoadOptions)) {
-		*status |= (JackFailure|JackInvalidOption);
+		*status = (jack_status_t) ((*status) | (JackFailure|JackInvalidOption));
 		return 0;
 	}
 
@@ -188,10 +188,10 @@ jack_internal_client_unload (jack_client_t *client,
 		req.x.intclient.options = JackNullOption;
 		req.x.intclient.id = intclient;
 		jack_client_deliver_request (client, &req);
-		status = req.status;
+		status = (jack_status_t) req.status;
 
 	} else {			/* intclient is null */
-		status = (JackNoSuchClient|JackFailure);
+		status = (jack_status_t) (JackNoSuchClient|JackFailure);
 	}
 
 	return status;

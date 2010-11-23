@@ -30,7 +30,7 @@
 
 #define MESSAGE(fmt,args...) jack_messagebuffer_add(fmt , ##args)
 #define VERBOSE(engine,fmt,args...)	\
-	if ((engine)->verbose)		\
+	if ((this)->verbose)		\
 		jack_messagebuffer_add(fmt , ##args)
 
 void jack_messagebuffer_init();

@@ -43,7 +43,7 @@
 #include "libjack/local.h"
 
 void
-jack_client_disconnect_ports (jack_engine_t *engine,
+jack_engine_t::jack_client_disconnect_ports (
 			      jack_client_internal_t *client)
 {
 	JSList *node;
@@ -67,7 +67,7 @@ jack_client_disconnect_ports (jack_engine_t *engine,
 }			
 
 int
-jack_client_do_deactivate (jack_engine_t *engine,
+jack_engine_t::jack_client_do_deactivate (
 			   jack_client_internal_t *client, int sort_graph)
 {
 	jack_event_t event;
@@ -110,7 +110,7 @@ jack_client_do_deactivate (jack_engine_t *engine,
 }
 
 static int
-jack_load_client (jack_engine_t *engine, jack_client_internal_t *client,
+jack_engine_t::jack_load_client ( jack_client_internal_t *client,
 		  const char *so_name)
 {
 	const char *errstr;
@@ -151,7 +151,7 @@ jack_load_client (jack_engine_t *engine, jack_client_internal_t *client,
 }
 
 static void
-jack_client_unload (jack_client_internal_t *client)
+jack_engine_t::jack_client_unload (jack_client_internal_t *client)
 {
 	if (client->handle) {
 		if (client->finish) {
@@ -162,7 +162,7 @@ jack_client_unload (jack_client_internal_t *client)
 }
 
 static void
-jack_zombify_client (jack_engine_t *engine, jack_client_internal_t *client)
+jack_engine_t::jack_zombify_client ( jack_client_internal_t *client)
 {
 	VERBOSE (engine, "removing client \"%s\" from the processing chain",
 		 client->control->name);
@@ -178,7 +178,7 @@ jack_zombify_client (jack_engine_t *engine, jack_client_internal_t *client)
 }
 
 void
-jack_remove_client (jack_engine_t *engine, jack_client_internal_t *client)
+jack_engine_t::jack_remove_client ( jack_client_internal_t *client)
 {
 	JSList *node;
 	jack_client_id_t finalizer=0;
@@ -264,7 +264,7 @@ jack_remove_client (jack_engine_t *engine, jack_client_internal_t *client)
 }
 
 int
-jack_check_clients (jack_engine_t* engine, int with_timeout_check)
+jack_engine_t::jack_check_clients ( int with_timeout_check)
 {
 	/* CALLER MUST HOLD graph read lock */
 	
@@ -341,7 +341,7 @@ jack_check_clients (jack_engine_t* engine, int with_timeout_check)
 }
 
 void
-jack_remove_clients (jack_engine_t* engine, int* exit_freewheeling_when_done)
+jack_engine_t::jack_remove_clients ( int* exit_freewheeling_when_done)
 {
 	JSList *tmp, *node;
 	int need_sort = FALSE;
@@ -419,7 +419,7 @@ jack_remove_clients (jack_engine_t* engine, int* exit_freewheeling_when_done)
 }
 
 jack_client_internal_t *
-jack_client_by_name (jack_engine_t *engine, const char *name)
+jack_engine_t::jack_client_by_name ( const char *name)
 {
 	jack_client_internal_t *client = NULL;
 	JSList *node;
@@ -440,7 +440,7 @@ jack_client_by_name (jack_engine_t *engine, const char *name)
 }
 
 static jack_client_id_t
-jack_client_id_by_name (jack_engine_t *engine, const char *name)
+jack_engine_t::jack_client_id_by_name ( const char *name)
 {
 	jack_client_id_t id = 0;	/* NULL client ID */
 	JSList *node;
@@ -463,7 +463,7 @@ jack_client_id_by_name (jack_engine_t *engine, const char *name)
 }
 
 jack_client_internal_t *
-jack_client_internal_by_id (jack_engine_t *engine, jack_client_id_t id)
+jack_engine_t::jack_client_internal_by_id ( jack_client_id_t id)
 {
 	jack_client_internal_t *client = NULL;
 	JSList *node;
@@ -483,7 +483,7 @@ jack_client_internal_by_id (jack_engine_t *engine, jack_client_id_t id)
 }
 
 int
-jack_client_name_reserved( jack_engine_t *engine, const char *name )
+jack_engine_t::jack_client_name_reserved( const char *name )
 {
 	JSList *node;
         for (node = engine->reserved_client_names; node; node = jack_slist_next (node)) {
@@ -499,7 +499,7 @@ jack_client_name_reserved( jack_engine_t *engine, const char *name )
  * returns 0 if successful, updates name in place
  */
 static inline int
-jack_generate_unique_name (jack_engine_t *engine, char *name)
+jack_engine_t::jack_generate_unique_name ( char *name)
 {
 	int tens, ones;
 	int length = strlen (name);
@@ -533,7 +533,7 @@ jack_generate_unique_name (jack_engine_t *engine, char *name)
 }
 
 static int
-jack_client_name_invalid (jack_engine_t *engine, char *name,
+jack_engine_t::jack_client_name_invalid ( char *name,
 			  jack_options_t options, jack_status_t *status)
 {
 	/* Since this is always called from the server thread, no
@@ -565,7 +565,7 @@ jack_client_name_invalid (jack_engine_t *engine, char *name,
 }
 
 static jack_client_id_t
-jack_get_client_id( jack_engine_t *engine )
+jack_engine_t::jack_get_client_id( )
 {
 	int i;
 	for( i=0; i<JACK_MAX_CLIENTS; i++ )
@@ -581,7 +581,7 @@ jack_get_client_id( jack_engine_t *engine )
 /* Set up the engine's client internal and control structures for both
  * internal and external clients. */
 static jack_client_internal_t *
-jack_setup_client_control (jack_engine_t *engine, int fd,
+jack_engine_t::jack_setup_client_control ( int fd,
 			   ClientType type, const char *name, jack_client_id_t uuid)
 {
 	jack_client_internal_t *client;
@@ -690,7 +690,7 @@ jack_setup_client_control (jack_engine_t *engine, int fd,
 }
 
 static void
-jack_ensure_uuid_unique (jack_engine_t *engine, jack_client_id_t uuid)
+jack_engine_t::jack_ensure_uuid_unique ( jack_client_id_t uuid)
 {
 	JSList *node;
 
@@ -705,7 +705,7 @@ jack_ensure_uuid_unique (jack_engine_t *engine, jack_client_id_t uuid)
 
 /* set up all types of clients */
 static jack_client_internal_t *
-setup_client (jack_engine_t *engine, ClientType type, char *name, jack_client_id_t uuid,
+jack_engine_t::setup_client ( ClientType type, char *name, jack_client_id_t uuid,
 	      jack_options_t options, jack_status_t *status, int client_fd,
 	      const char *object_path, const char *object_data)
 {
@@ -806,7 +806,7 @@ setup_client (jack_engine_t *engine, ClientType type, char *name, jack_client_id
 }
 
 jack_client_internal_t *
-jack_create_driver_client (jack_engine_t *engine, char *name)
+jack_engine_t::jack_create_driver_client ( char *name)
 {
 	jack_client_connect_request_t req;
 	jack_status_t status;
@@ -823,7 +823,7 @@ jack_create_driver_client (jack_engine_t *engine, char *name)
 }
 
 static jack_status_t
-handle_unload_client (jack_engine_t *engine, jack_client_id_t id)
+jack_engine_t::handle_unload_client ( jack_client_id_t id)
 {
 	/* called *without* the request_lock */
 	jack_client_internal_t *client;
@@ -846,7 +846,7 @@ handle_unload_client (jack_engine_t *engine, jack_client_id_t id)
 }
 
 static char *
-jack_get_reserved_name( jack_engine_t *engine, jack_client_id_t uuid )
+jack_engine_t::jack_get_reserved_name(  jack_client_id_t uuid )
 {
 	JSList *node;
         for (node = engine->reserved_client_names; node; node = jack_slist_next (node)) {
@@ -862,7 +862,7 @@ jack_get_reserved_name( jack_engine_t *engine, jack_client_id_t uuid )
 	return 0;
 }
 int
-jack_client_create (jack_engine_t *engine, int client_fd)
+jack_engine_t::jack_client_create ( int client_fd)
 {
 	/* called *without* the request_lock */
 	jack_client_internal_t *client;
@@ -968,7 +968,7 @@ jack_client_create (jack_engine_t *engine, int client_fd)
 }
 
 int
-jack_client_activate (jack_engine_t *engine, jack_client_id_t id)
+jack_engine_t::jack_client_activate ( jack_client_id_t id)
 {
 	jack_client_internal_t *client;
 	JSList *node;
@@ -1011,7 +1011,7 @@ jack_client_activate (jack_engine_t *engine, jack_client_id_t id)
 }	
 
 int
-jack_client_deactivate (jack_engine_t *engine, jack_client_id_t id)
+jack_engine_t::jack_client_deactivate ( jack_client_id_t id)
 {
 	JSList *node;
 	int ret = -1;
@@ -1045,7 +1045,7 @@ jack_client_deactivate (jack_engine_t *engine, jack_client_id_t id)
 }	
 
 jack_client_internal_t *
-jack_get_client_for_fd (jack_engine_t *engine, int fd)
+jack_engine_t::jack_get_client_for_fd ( int fd)
 {
 	/* CALLER MUST HOLD GRAPH LOCK */
 
@@ -1069,7 +1069,7 @@ jack_get_client_for_fd (jack_engine_t *engine, int fd)
 }
 
 int
-jack_mark_client_socket_error (jack_engine_t *engine, int fd)
+jack_engine_t::jack_mark_client_socket_error ( int fd)
 {
 	/* CALLER MUST HOLD GRAPH LOCK */
 
@@ -1101,7 +1101,7 @@ jack_mark_client_socket_error (jack_engine_t *engine, int fd)
 }
 
 void
-jack_client_delete (jack_engine_t *engine, jack_client_internal_t *client)
+jack_engine_t::jack_client_delete ( jack_client_internal_t *client)
 {
 	jack_client_id_t id = client->control->id;
 
@@ -1131,7 +1131,7 @@ jack_client_delete (jack_engine_t *engine, jack_client_internal_t *client)
 }
 
 void
-jack_intclient_handle_request (jack_engine_t *engine, jack_request_t *req)
+jack_engine_t::jack_intclient_handle_request ( jack_request_t *req)
 {
 	jack_client_internal_t *client;
 
@@ -1144,7 +1144,7 @@ jack_intclient_handle_request (jack_engine_t *engine, jack_request_t *req)
 }
 
 void
-jack_intclient_load_request (jack_engine_t *engine, jack_request_t *req)
+jack_engine_t::jack_intclient_load_request ( jack_request_t *req)
 {
 	/* called with the request_lock */
 	jack_client_internal_t *client;
@@ -1171,7 +1171,7 @@ jack_intclient_load_request (jack_engine_t *engine, jack_request_t *req)
 }
 
 void
-jack_intclient_name_request (jack_engine_t *engine, jack_request_t *req)
+jack_engine_t::jack_intclient_name_request ( jack_request_t *req)
 {
 	jack_client_internal_t *client;
 
@@ -1189,7 +1189,7 @@ jack_intclient_name_request (jack_engine_t *engine, jack_request_t *req)
 }
 
 void
-jack_intclient_unload_request (jack_engine_t *engine, jack_request_t *req)
+jack_engine_t::jack_intclient_unload_request ( jack_request_t *req)
 {
 	/* Called with the request_lock, but we need to call
 	 * handle_unload_client() *without* it. */
