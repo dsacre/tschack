@@ -67,97 +67,97 @@ struct jack_reserved_name_t {
 
 /* The main engine structure in local memory. */
 struct jack_engine_t {
-    jack_control_t        *control;
+    jack_control_t        *_control;
 
-    JSList                *drivers;
+    JSList                *_drivers;
     jack_driver_t   *driver;
-    jack_driver_desc_t    *driver_desc;
-    JSList                *driver_params;
+    jack_driver_desc_t    *_driver_desc;
+    JSList                *_driver_params;
 
     /* these are "callbacks" made by the driver backend */
-    int  (*set_buffer_size) (struct _jack_engine *, jack_nframes_t frames);
-    int  (*set_sample_rate) (struct _jack_engine *, jack_nframes_t frames);
-    int  (*run_cycle)	    (struct _jack_engine *, jack_nframes_t nframes,
+    int  (*_set_buffer_size) (struct _jack_engine *, jack_nframes_t frames);
+    int  (*_set_sample_rate) (struct _jack_engine *, jack_nframes_t frames);
+    int  (*_run_cycle)	    (struct _jack_engine *, jack_nframes_t nframes,
 			     float delayed_usecs);
-    void (*delay)	    (struct _jack_engine *, float delayed_usecs);
-    void (*transport_cycle_start) (struct _jack_engine *, jack_time_t time);
-    void (*driver_exit)     (struct _jack_engine *);
-    jack_time_t (*get_microseconds)(void);
+    void (*_delay)	    (struct _jack_engine *, float delayed_usecs);
+    void (*_transport_cycle_start) (struct _jack_engine *, jack_time_t time);
+    void (*_driver_exit)     (struct _jack_engine *);
+    jack_time_t (*_get_microseconds)(void);
     /* "private" sections starts here */
 
     /* engine serialization -- use precedence for deadlock avoidance */
-    pthread_mutex_t request_lock; /* precedes client_lock */
-    pthread_rwlock_t client_lock;
-    pthread_mutex_t port_lock;
-    pthread_mutexattr_t problem_attr;
-    pthread_mutex_t problem_lock; /* must hold write lock on client_lock */
-    int		    process_errors;
-    int		    period_msecs;
+    pthread_mutex_t _request_lock; /* precedes client_lock */
+    pthread_rwlock_t _client_lock;
+    pthread_mutex_t _port_lock;
+    pthread_mutexattr_t _problem_attr;
+    pthread_mutex_t _problem_lock; /* must hold write lock on client_lock */
+    int		    _process_errors;
+    int		    _period_msecs;
 
     /* Time to wait for clients in msecs.  Used when jackd is run
      * without realtime priority enabled. */
-    int		    client_timeout_msecs;
+    int		    _client_timeout_msecs;
 
     /* info on the shm segment containing this->control */
 
-    jack_shm_info_t control_shm;
+    jack_shm_info_t _control_shm;
 
     /* address-space local port buffer and segment info, 
        indexed by the port type_id 
     */
-    jack_port_buffer_list_t port_buffers[JACK_MAX_PORT_TYPES];
-    jack_shm_info_t         port_segment[JACK_MAX_PORT_TYPES];
+    jack_port_buffer_list_t _port_buffers[JACK_MAX_PORT_TYPES];
+    jack_shm_info_t         _port_segment[JACK_MAX_PORT_TYPES];
 
-    unsigned int    port_max;
-    pthread_t	    server_thread;
-    pthread_t	    watchdog_thread;
+    unsigned int    _port_max;
+    pthread_t	    _server_thread;
+    pthread_t	    _watchdog_thread;
 
-    int		    fds[2];
-    int		    cleanup_fifo[2];
-    int		    graph_wait_fd;
-    jack_client_id_t next_client_id;
-    size_t	    pfd_size;
-    size_t	    pfd_max;
-    struct pollfd  *pfd;
-    char	    fifo_prefix[PATH_MAX+1];
-    int		   *fifo;
-    unsigned long   fifo_size;
+    int		    _fds[2];
+    int		    _cleanup_fifo[2];
+    int		    _graph_wait_fd;
+    jack_client_id_t _next_client_id;
+    size_t	    _pfd_size;
+    size_t	    _pfd_max;
+    struct pollfd  *_pfd;
+    char	    _fifo_prefix[PATH_MAX+1];
+    int		   *_fifo;
+    unsigned long   _fifo_size;
 
     /* session handling */
-    int		    session_reply_fd;
-    int		    session_pending_replies;
+    int		    _session_reply_fd;
+    int		    _session_pending_replies;
 
-    unsigned long   external_client_cnt;
-    int		    rtpriority;
-    volatile char   freewheeling;
-    volatile char   stop_freewheeling;
-    jack_client_id_t fwclient;
-    pthread_t       freewheel_thread;
-    char	    verbose;
-    char	    do_munlock;
-    const char	   *server_name;
-    char	    temporary;
-    int		    reordered;
-    int		    watchdog_check;
-    int		    feedbackcount;
-    int             removing_clients;
-    pid_t           wait_pid;
-    int             nozombies;
-    int		    jobs;
-    int             timeout_count_threshold;
-    volatile int    problems;
-    volatile int    pending_chain;
-    volatile int    timeout_count;
-    volatile int    new_clients_allowed;    
+    unsigned long   _external_client_cnt;
+    int		    _rtpriority;
+    volatile char   _freewheeling;
+    volatile char   _stop_freewheeling;
+    jack_client_id_t _fwclient;
+    pthread_t       _freewheel_thread;
+    char	    _verbose;
+    char	    _do_munlock;
+    const char	   *_server_name;
+    char	    _temporary;
+    int		    _reordered;
+    int		    _watchdog_check;
+    int		    _feedbackcount;
+    int             _removing_clients;
+    pid_t           _wait_pid;
+    int             _nozombies;
+    int		    _jobs;
+    int             _timeout_count_threshold;
+    volatile int    _problems;
+    volatile int    _pending_chain;
+    volatile int    _timeout_count;
+    volatile int    _new_clients_allowed;    
 
     /* these lists are protected by `client_lock' */
-    JSList	   *clients;
-    JSList	   *reserved_client_names;
+    JSList	   *_clients;
+    JSList	   *_reserved_client_names;
 
-    jack_port_internal_t    *internal_ports;
-    jack_client_internal_t  *timebase_client;
-    jack_port_buffer_info_t *silent_buffer;
-    jack_client_internal_t  *current_client;
+    jack_port_internal_t    *_internal_ports;
+    jack_client_internal_t  *_timebase_client;
+    jack_port_buffer_info_t *_silent_buffer;
+    jack_client_internal_t  *_current_client;
 
     /* these lists are protected by the chain locks
      * the RT thread owns one of them, the other is free
@@ -165,37 +165,37 @@ struct jack_engine_t {
      * needs to be triggered to put the changes in effect.
      */
 
-    JSList	   *process_graph_list[2];
-    JSList	   *server_wakeup_list[2];
-    _Atomic_word   *client_activation_counts_init[2];
-    _Atomic_word   *port_activation_counts_init[2];
+    JSList	   *_process_graph_list[2];
+    JSList	   *_server_wakeup_list[2];
+    _Atomic_word   *_client_activation_counts_init[2];
+    _Atomic_word   *_port_activation_counts_init[2];
 
-    pthread_mutex_t swap_mutex;
+    pthread_mutex_t _swap_mutex;
 
 
 #define JACK_ENGINE_ROLLING_COUNT 32
 #define JACK_ENGINE_ROLLING_INTERVAL 1024
 
-    jack_time_t rolling_client_usecs[JACK_ENGINE_ROLLING_COUNT];
-    int		    rolling_client_usecs_cnt;
-    int		    rolling_client_usecs_index;
-    int		    rolling_interval;
-    float	    max_usecs;
-    float	    spare_usecs;
+    jack_time_t _rolling_client_usecs[JACK_ENGINE_ROLLING_COUNT];
+    int		    _rolling_client_usecs_cnt;
+    int		    _rolling_client_usecs_index;
+    int		    _rolling_interval;
+    float	    _max_usecs;
+    float	    _spare_usecs;
 
-    int first_wakeup;
+    int _first_wakeup;
     
 #ifdef JACK_USE_MACH_THREADS
     /* specific resources for server/client real-time thread communication */
-    mach_port_t servertask, bp;
-    int portnum;
+    mach_port_t _servertask, _bp;
+    int _portnum;
 #endif
 
     /* used for port names munging */
-    int audio_out_cnt;
-    int audio_in_cnt;
-    int midi_out_cnt;
-    int midi_in_cnt;
+    int _audio_out_cnt;
+    int _audio_in_cnt;
+    int _midi_out_cnt;
+    int _midi_in_cnt;
 
 
     // methods....
