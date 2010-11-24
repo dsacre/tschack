@@ -47,6 +47,8 @@ static int dummy_bufsize (jack_driver_t *drv,
 static int dummy_stop (jack_driver_t *drv) { return 0; }
 static int dummy_start (jack_driver_t *drv) { return 0; }
 
+extern "C" {
+
 void
 jack_driver_init (jack_driver_t *driver)
 {
@@ -259,4 +261,6 @@ void
 jack_driver_nt_finish     (jack_driver_nt_t * driver)
 {
 	pthread_mutex_destroy (&driver->nt_run_lock);
+}
+
 }

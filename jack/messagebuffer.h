@@ -33,6 +33,10 @@
 	if ((engine)->_verbose)		\
 		jack_messagebuffer_add(fmt , ##args)
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void jack_messagebuffer_init();
 void jack_messagebuffer_exit();
 void jack_messagebuffer_thread_init (void (*cb)(void*), void*);
@@ -40,5 +44,9 @@ void jack_messagebuffer_thread_init (void (*cb)(void*), void*);
 void jack_messagebuffer_add(const char *fmt, ...);
 
 void jack_messagebuffer_thread_init (void (*cb)(void*), void* arg);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __jack_messagebuffer_h__ */

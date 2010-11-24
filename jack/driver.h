@@ -227,8 +227,6 @@ struct jack_driver_t {
 
 typedef jack_driver_desc_t * (*JackDriverDescFunction) ();
 
-void jack_driver_init (jack_driver_t *);
-void jack_driver_release (jack_driver_t *);
 
 jack_driver_t *jack_driver_load (int argc, char **argv);
 void jack_driver_unload (jack_driver_t *);
@@ -294,8 +292,17 @@ struct jack_driver_nt_t {
 
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void jack_driver_init (jack_driver_t *);
+void jack_driver_release (jack_driver_t *);
 void jack_driver_nt_init   (jack_driver_nt_t * driver);
 void jack_driver_nt_finish (jack_driver_nt_t * driver);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __jack_driver_h__ */
