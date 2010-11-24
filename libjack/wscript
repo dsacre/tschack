@@ -7,10 +7,10 @@ def configure(conf):
 def build(bld):
 	bld.new_task_gen(
 		features = 'cxx cshlib',
-		source = 'client.c driver.c intclient.c messagebuffer.c midiport.c pool.c port.c ringbuffer.c sanitycheck.c shm.c simd.c systemtest.c thread.c time.c timestamps.c transclient.c unlock.c',
+		source = 'client.cc driver.cc intclient.cc messagebuffer.cc midiport.cc pool.cc port.cc ringbuffer.cc sanitycheck.cc shm.cc simd.cc systemtest.cc thread.cc time.cc timestamps.cc transclient.cc unlock.cc',
 		target = 'jack',
-		includes = "../",
-		lib = "dl pthread")
+		includes = ".. ../config",
+		lib = ['dl', 'pthread', 'rt'] )
 
 
 

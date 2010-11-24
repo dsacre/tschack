@@ -17,6 +17,6 @@ def build(bld):
 		source = 'jackd.cc',
 		target = 'jackd',
 		includes = ".. ../config",
-		uselib_local = "jackserver",
+		uselib_local = [ "jackserver", "jack" ],
 		lib = ['dl', 'pthread'] )
 
