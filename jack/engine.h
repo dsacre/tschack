@@ -197,6 +197,7 @@ struct jack_engine_t {
     int _midi_out_cnt;
     int _midi_in_cnt;
 
+    static jack_timer_type_t clock_source; 
 
     // methods....
 
@@ -334,7 +335,7 @@ void
 do_request (jack_request_t *req, int *reply_fd);
 
 
-int
+static int
 internal_client_request (void* ptr, jack_request_t *request);
 
 int
@@ -556,10 +557,10 @@ static int
 jack_load_client ( jack_client_internal_t *client,
 		  const char *so_name);
 
-static void
+void
 jack_client_unload (jack_client_internal_t *client);
 
-static void
+void
 jack_zombify_client ( jack_client_internal_t *client);
 
 void
@@ -574,7 +575,7 @@ jack_remove_clients ( int* exit_freewheeling_when_done);
 jack_client_internal_t *
 jack_client_by_name ( const char *name);
 
-static jack_client_id_t
+jack_client_id_t
 jack_client_id_by_name ( const char *name);
 
 jack_client_internal_t *
@@ -587,27 +588,27 @@ jack_client_name_reserved(  const char *name );
  *
  * returns 0 if successful, updates name in place
  */
-static inline int
+inline int
 jack_generate_unique_name ( char *name);
 
-static int
+int
 jack_client_name_invalid ( char *name,
 			  jack_options_t options, jack_status_t *status);
 
-static jack_client_id_t
-jack_get_client_id( jack_engine_t *engine );
+jack_client_id_t
+jack_get_client_id();
 
 /* Set up the engine's client internal and control structures for both
  * internal and external clients. */
-static jack_client_internal_t *
+jack_client_internal_t *
 jack_setup_client_control ( int fd,
 			   ClientType type, const char *name, jack_client_id_t uuid);
 
-static void
+void
 jack_ensure_uuid_unique ( jack_client_id_t uuid);
 
 /* set up all types of clients */
-static jack_client_internal_t *
+jack_client_internal_t *
 setup_client ( ClientType type, char *name, jack_client_id_t uuid,
 	      jack_options_t options, jack_status_t *status, int client_fd,
 	      const char *object_path, const char *object_data);
@@ -615,10 +616,10 @@ setup_client ( ClientType type, char *name, jack_client_id_t uuid,
 jack_client_internal_t *
 jack_create_driver_client ( char *name);
 
-static jack_status_t
+jack_status_t
 handle_unload_client ( jack_client_id_t id);
 
-static char *
+char *
 jack_get_reserved_name(  jack_client_id_t uuid );
 
 int
@@ -662,29 +663,29 @@ jack_intclient_unload_request ( jack_request_t *req);
 /* initiate polling a new slow-sync client
  *
  *   precondition: caller holds the graph lock. */
-static inline void
+inline void
 jack_sync_poll_new ( jack_client_internal_t *client);
 
 /* stop polling a specific slow-sync client
  *
  *   precondition: caller holds the graph lock. */
-static inline void
+inline void
 jack_sync_poll_deactivate (jack_client_internal_t *client);
 
 /* stop polling all the slow-sync clients
  *
  *   precondition: caller holds the graph lock. */
-static void
+void
 jack_sync_poll_stop ();
 
 /* start polling all the slow-sync clients
  *
  *   precondition: caller holds the graph lock. */
-static void
+void
 jack_sync_poll_start ();
 
 /* check for sync timeout */
-static inline int
+inline int
 jack_sync_timeout ();
 
 
@@ -796,5 +797,4 @@ typedef struct {
 } jack_connection_internal_t;
 
 
-extern jack_timer_type_t clock_source; 
 #endif /* __jack_engine_h__ */

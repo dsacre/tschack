@@ -50,9 +50,11 @@
 #endif
 
 /* Needed by <sysdeps/time.h> */
+extern "C" {
 extern void jack_error (const char *fmt, ...);
 
 extern void jack_info (const char *fmt, ...);
+}
 
 #include <jack/jack.h>
 #include <jack/types.h>

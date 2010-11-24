@@ -275,7 +275,7 @@ struct jack_driver_nt_t {
 
 #define JACK_DRIVER_NT_DECL \
     JACK_DRIVER_DECL \
-    struct _jack_engine * engine; \
+    jack_engine_t * engine; \
     volatile int nt_run; \
     pthread_t nt_thread; \
     pthread_mutex_t nt_run_lock; \
