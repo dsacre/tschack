@@ -219,11 +219,11 @@ jack_main (jack_driver_desc_t * driver_desc, JSList * driver_params)
 		sigprocmask (SIG_UNBLOCK, &signals, 0);
 	}
 	
-	engine->jack_engine_delete ();
+	delete engine;
 	return 1;
 	
 error:
-	engine->jack_engine_delete ();
+	delete engine;
 	return -1;
 }
 
@@ -577,11 +577,11 @@ main (int argc, char *argv[])
 
 		case 'c':
 			if (tolower (optarg[0]) == 'h') {
-				clock_source = JACK_TIMER_HPET;
+				jack_engine_t::clock_source = JACK_TIMER_HPET;
 			} else if (tolower (optarg[0]) == 'c') {
-				clock_source = JACK_TIMER_CYCLE_COUNTER;
+				jack_engine_t::clock_source = JACK_TIMER_CYCLE_COUNTER;
 			} else if (tolower (optarg[0]) == 's') {
-				clock_source = JACK_TIMER_SYSTEM_CLOCK;
+				jack_engine_t::clock_source = JACK_TIMER_SYSTEM_CLOCK;
 			} else {
 				usage (stderr);
 				return -1;
@@ -698,7 +698,7 @@ main (int argc, char *argv[])
 
 	copyright (stdout);
 
-	if (do_sanity_checks && (0 < sanitycheck (realtime, (clock_source == JACK_TIMER_CYCLE_COUNTER)))) {
+	if (do_sanity_checks && (0 < sanitycheck (realtime, (jack_engine_t::clock_source == JACK_TIMER_CYCLE_COUNTER)))) {
 		return -1;
 	}
 

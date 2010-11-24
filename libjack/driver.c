@@ -132,7 +132,7 @@ jack_driver_nt_thread (void * arg)
  out:
 	if (rc) {
 		driver->nt_run = DRIVER_NT_DYING;
-		driver->engine->driver_exit (driver->engine);
+		driver->engine->_driver_exit (driver->engine);
 	}
 	pthread_exit (NULL);
 }
@@ -151,8 +151,8 @@ jack_driver_nt_start (jack_driver_nt_t * driver)
 
 	if ((err = jack_client_create_thread (NULL,
 					      &driver->nt_thread, 
-					      driver->engine->rtpriority,
-					      driver->engine->control->real_time,
+					      driver->engine->_rtpriority,
+					      driver->engine->_control->real_time,
 					      jack_driver_nt_thread, driver)) != 0) {
 		jack_error ("DRIVER NT: could not start driver thread!");
 		return err;
@@ -215,7 +215,7 @@ jack_driver_nt_bufsize (jack_driver_nt_t * driver, jack_nframes_t nframes)
 	err = jack_driver_nt_do_stop (driver, DRIVER_NT_PAUSE);
 	if (err) {
 		jack_error ("DRIVER NT: could not stop driver to change buffer size");
-		driver->engine->driver_exit (driver->engine);
+		driver->engine->_driver_exit (driver->engine);
 		return err;
 	}
 
@@ -224,7 +224,7 @@ jack_driver_nt_bufsize (jack_driver_nt_t * driver, jack_nframes_t nframes)
 	err = jack_driver_nt_start (driver);
 	if (err) {
 		jack_error ("DRIVER NT: could not restart driver during buffer size change");
-		driver->engine->driver_exit (driver->engine);
+		driver->engine->_driver_exit (driver->engine);
 		return err;
 	}
 

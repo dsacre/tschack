@@ -516,13 +516,16 @@ jack_engine_t::jack_set_buffer_size_request ( jack_nframes_t nframes)
 */
 
 #ifdef HAVE_CLOCK_GETTIME
-const int system_clock_monotonic = 1;
+const int jack_engine_t::system_clock_monotonic = 1;
 #else
-const int system_clock_monotonic = 0;
+const int jack_engine_t::system_clock_monotonic = 0;
 #endif
 
+jack_timer_type_t jack_engine_t::clock_source = JACK_TIMER_SYSTEM_CLOCK; 
+
+
 int
-jack_engine_t::linux_poll_bug_encountered ( jack_time_t then, jack_time_t *required)
+jack_engine_t::linux_poll_bug_encountered (jack_time_t then, jack_time_t *required)
 {
 	if (_control->clock_source != JACK_TIMER_SYSTEM_CLOCK || system_clock_monotonic) {
 		jack_time_t now = jack_get_microseconds ();
@@ -1682,7 +1685,7 @@ jack_engine_t::jack_server_thread ()
 }
 
 int
-jack_set_sample_rate_aux (jack_engine_t *engine, jack_nframes_t nframes)
+jack_engine_t::jack_set_sample_rate_aux (jack_engine_t *engine, jack_nframes_t nframes)
 {
 	return engine->jack_set_sample_rate (nframes);
 }

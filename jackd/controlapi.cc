@@ -322,7 +322,7 @@ jack_drivers_get_descriptor (JSList * drivers, const char * sofile)
 	if ((driver_dir = getenv("JACK_DRIVER_DIR")) == 0) {
 		driver_dir = ADDON_DIR;
 	}
-	filename = malloc (strlen (driver_dir) + 1 + strlen (sofile) + 1);
+	filename = (char *) malloc (strlen (driver_dir) + 1 + strlen (sofile) + 1);
 	sprintf (filename, "%s/%s", driver_dir, sofile);
 
 //	if (verbose) {
@@ -1129,7 +1129,7 @@ const JSList * jackctl_server_get_drivers_list(jackctl_server_t *server_ptr)
 bool jackctl_server_stop(jackctl_server_t *server_ptr)
 {
 	//jack_engine_driver_exit (server_ptr->engine);
-	jack_engine_delete (server_ptr->engine);
+	delete server_ptr->engine; 
 
     /* clean up shared memory and files from this server instance */
     //jack_log("cleaning up shared memory");
@@ -1192,7 +1192,7 @@ jackctl_server_start(
     
     oldsignals = jackctl_block_signals();
 
-    if ((server_ptr->engine = jack_engine_new (server_ptr->realtime.b, server_ptr->realtime_priority.i, 
+    if ((server_ptr->engine = new jack_engine_t (server_ptr->realtime.b, server_ptr->realtime_priority.i, 
 				    server_ptr->do_mlock.b, server_ptr->do_unlock.b, server_ptr->name.str,
 				    server_ptr->temporary.b, server_ptr->verbose.b, server_ptr->client_timeout.i,
 				    server_ptr->port_max.i, getpid(), frame_time_offset, 
@@ -1201,13 +1201,13 @@ jackctl_server_start(
 	    goto fail_unregister;
     }
 
-    if (jack_engine_load_driver (server_ptr->engine, driver_ptr->desc_ptr, driver_ptr->set_parameters))
+    if (server_ptr->engine->jack_engine_load_driver (driver_ptr->desc_ptr, driver_ptr->set_parameters))
     {
 		jack_error ("cannot load driver module %s", driver_ptr->desc_ptr->name);
 		goto fail_delete;
     }
 
-    if (server_ptr->engine->driver->start (server_ptr->engine->driver) != 0) {
+    if (server_ptr->engine->_driver->start (server_ptr->engine->_driver) != 0) {
 	    jack_error ("cannot start driver");
 	    goto fail_close;
     }
@@ -1218,7 +1218,7 @@ jackctl_server_start(
 fail_close:
 
 fail_delete:
-    jack_engine_delete (server_ptr->engine);
+    delete server_ptr->engine;
     server_ptr->engine = NULL;
 
 fail_unregister:
@@ -1527,33 +1527,33 @@ bool jackctl_server_switch_master(jackctl_server_t * server_ptr, jackctl_driver_
     if (server_ptr->engine == NULL)
 	    goto fail_nostart;
 
-    old_driver = server_ptr->engine->driver;
+    old_driver = server_ptr->engine->_driver;
 
     if (old_driver)
     {
 	    old_driver->stop (old_driver );
 	    old_driver->detach (old_driver, server_ptr->engine);
 
-	    pthread_mutex_lock (&server_ptr->engine->request_lock);
+	    pthread_mutex_lock (&server_ptr->engine->_request_lock);
 	    jack_lock_graph (server_ptr->engine);
-	    jack_remove_client (server_ptr->engine, old_driver->internal_client);
+	    server_ptr->engine->jack_remove_client (old_driver->internal_client);
 	    jack_unlock_graph (server_ptr->engine);
-	    pthread_mutex_unlock (&server_ptr->engine->request_lock);
+	    pthread_mutex_unlock (&server_ptr->engine->_request_lock);
 
-	    jack_stop_watchdog (server_ptr->engine);
-	    server_ptr->engine->driver = NULL;
+	    server_ptr->engine->jack_stop_watchdog ();
+	    server_ptr->engine->_driver = NULL;
 
-	    jack_driver_unload (old_driver);
+	    server_ptr->engine->jack_driver_unload (old_driver);
     }
 
-    if (jack_engine_load_driver (server_ptr->engine, driver_ptr->desc_ptr, driver_ptr->set_parameters))
+    if (server_ptr->engine->jack_engine_load_driver (driver_ptr->desc_ptr, driver_ptr->set_parameters))
     {
 	    jack_error ("cannot load driver module %s", driver_ptr->desc_ptr->name);
 	    goto fail_nodriver;
     }
 
 
-    if (server_ptr->engine->driver->start (server_ptr->engine->driver) != 0) {
+    if (server_ptr->engine->_driver->start (server_ptr->engine->_driver) != 0) {
 	    jack_error ("cannot start driver");
 	    goto fail_nostart;
     }
