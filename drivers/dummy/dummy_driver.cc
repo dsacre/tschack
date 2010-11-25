@@ -35,6 +35,10 @@
 
 #include "dummy_driver.h"
 
+// XXX:
+#define PRIu32 "u"
+#define PRIu64 "lu"
+
 #undef DEBUG_WAKEUP
 
 /* this is used for calculate what counts as an xrun */
@@ -47,7 +51,7 @@ FakeVideoSync( dummy_driver_t *driver )
         static int vidCounter = VIDEO_SYNC_PERIOD;
         
         int period = driver->period_size;
-        jack_position_t *position = &driver->engine->control->current_time;
+        jack_position_t *position = &driver->engine->_control->current_time;
 
         if ( period >= VIDEO_SYNC_PERIOD ) {
                 jack_error("JACK driver period size too large for simple video sync emulation. Halting.");
@@ -146,8 +150,8 @@ dummy_driver_wait (dummy_driver_t *driver, int extra_fd, int *status,
 		driver->next_wakeup = add_ts(driver->next_wakeup, driver->wait_time);
 	}
 
-	driver->last_wait_ust = driver->engine->get_microseconds ();
-	driver->engine->transport_cycle_start (driver->engine,
+	driver->last_wait_ust = driver->engine->_get_microseconds ();
+	driver->engine->_transport_cycle_start (driver->engine,
 					       driver->last_wait_ust);
 
 	return nframes;
@@ -220,14 +224,14 @@ dummy_driver_run_cycle (dummy_driver_t *driver)
 	if (nframes == 0) {
 		/* we detected an xrun and restarted: notify
 		 * clients about the delay. */
-		engine->delay (engine, delayed_usecs);
+		engine->_delay (engine, delayed_usecs);
 		return 0;
 	} 
 
 	// FakeVideoSync (driver);
 
 	if (wait_status == 0)
-		return engine->run_cycle (engine, nframes, delayed_usecs);
+		return engine->_run_cycle (engine, nframes, delayed_usecs);
 
 	if (wait_status < 0)
 		return -1;
@@ -250,7 +254,7 @@ dummy_driver_bufsize (dummy_driver_t* driver, jack_nframes_t nframes)
 				     * 1000000.0f);
 
 	/* tell the engine to change its buffer size */
-	if (driver->engine->set_buffer_size (driver->engine, nframes)) {
+	if (driver->engine->_set_buffer_size (driver->engine, nframes)) {
 		jack_error ("dummy: cannot set engine buffer size to %d (check MIDI)", nframes);
 		return -1;
 	}
@@ -273,11 +277,11 @@ dummy_driver_attach (dummy_driver_t *driver)
 	unsigned int chn;
 	int port_flags;
 
-	if (driver->engine->set_buffer_size (driver->engine, driver->period_size)) {
+	if (driver->engine->_set_buffer_size (driver->engine, driver->period_size)) {
 		jack_error ("dummy: cannot set engine buffer size to %d (check MIDI)", driver->period_size);
 		return -1;
 	}
-	driver->engine->set_sample_rate (driver->engine, driver->sample_rate);
+	driver->engine->_set_sample_rate (driver->engine, driver->sample_rate);
 
 	port_flags = JackPortIsOutput|JackPortIsPhysical|JackPortIsTerminal;
 
@@ -407,6 +411,8 @@ dummy_driver_new (jack_client_t * client,
 
 /* DRIVER "PLUGIN" INTERFACE */
 
+extern "C" {
+
 jack_driver_desc_t *
 driver_get_descriptor ()
 {
@@ -414,11 +420,11 @@ driver_get_descriptor ()
 	jack_driver_param_desc_t * params;
 	unsigned int i;
 
-	desc = calloc (1, sizeof (jack_driver_desc_t));
+	desc = (jack_driver_desc_t *) calloc (1, sizeof (jack_driver_desc_t));
 	strcpy (desc->name, "dummy");
 	desc->nparams = 5;
 
-	params = calloc (desc->nparams, sizeof (jack_driver_param_desc_t));
+	params = (jack_driver_param_desc_t *) calloc (desc->nparams, sizeof (jack_driver_param_desc_t));
 
 	i = 0;
 	strcpy (params[i].name, "capture");
@@ -466,7 +472,7 @@ driver_get_descriptor ()
 	return desc;
 }
 
-const char driver_client_name[] = "dummy_pcm";
+const char * driver_client_name = "dummy_pcm";
 
 jack_driver_t *
 driver_initialize (jack_client_t *client, const JSList * params)
@@ -523,3 +529,4 @@ driver_finish (jack_driver_t *driver)
 	dummy_driver_delete ((dummy_driver_t *) driver);
 }
 
+}
