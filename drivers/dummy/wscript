@@ -1,0 +1,15 @@
+#! /usr/bin/env python
+
+def configure(conf):
+    pass
+
+def build(bld):
+	driver = bld.new_task_gen(
+		    features = 'cxx cshlib',
+		    source = 'dummy_driver.cc',
+		    target = 'dummy',
+		    includes = "../.. ../../config",
+		    lib = ['dl', 'pthread', 'rt'] )
+
+	driver.env['shlib_PATTERN'] = 'jack_%s.so'
+

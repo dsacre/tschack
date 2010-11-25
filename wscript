@@ -21,10 +21,10 @@ def configure(conf):
     conf.check_tool('compiler_cxx')
     conf.check_tool('compiler_cc')
     conf.env.CXXFLAGS = [ '-O3', '-g']
-#    conf.sub_config('jack-gtkmm')
+    conf.sub_config('drivers')
 
 def build(bld):
-	bld.add_subdirs('jackd')
-	bld.add_subdirs('libjack')
-#	bld.add_subdirs('examples')
+    bld.add_subdirs('jackd')
+    bld.add_subdirs('libjack')
+    bld.add_subdirs('drivers')
 
