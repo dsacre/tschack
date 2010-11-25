@@ -2,8 +2,8 @@
 
 def configure(conf):
     conf.sub_config('dummy')
-#    conf.sub_config('alsa')
+    conf.sub_config('alsa')
 
 def build(bld):
     bld.add_subdirs('dummy')
-#    bld.add_subdirs('alsa')
+    bld.add_subdirs('alsa')
