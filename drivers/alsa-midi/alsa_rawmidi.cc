@@ -19,7 +19,7 @@
  */
 
 /* Required for clock_nanosleep(). Thanks, Nedko */
-#define _GNU_SOURCE
+//#define _GNU_SOURCE
 
 #include "alsa_midi.h"
 #include <stdlib.h>
@@ -251,7 +251,7 @@ static void alsa_rawmidi_write(alsa_midi_t *m, jack_nframes_t nframes);
 
 alsa_midi_t* alsa_rawmidi_new(jack_client_t *jack)
 {
-	alsa_rawmidi_t *midi = calloc(1, sizeof(alsa_rawmidi_t));
+	alsa_rawmidi_t *midi = (alsa_rawmidi_t *) calloc(1, sizeof(alsa_rawmidi_t));
 	if (!midi)
 		goto fail_0;
 	midi->client = jack;
@@ -663,7 +663,7 @@ midi_port_t** scan_port_add(scan_t *scan, const alsa_id_t *id, midi_port_t **lis
 	midi_port_t *port;
 	midi_stream_t *str = id->id[2] ? &scan->midi->out : &scan->midi->in;
 
-	port = calloc(1, str->port_size);
+	port = (midi_port_t *) calloc(1, str->port_size);
 	if (!port)
 		return list;
 	midi_port_init(scan->midi, port, scan->info, id);
@@ -729,7 +729,7 @@ midi_port_t** scan_port_del(alsa_rawmidi_t *midi, midi_port_t **list)
 
 void* scan_thread(void *arg)
 {
-	alsa_rawmidi_t *midi = arg;
+	alsa_rawmidi_t *midi = (alsa_rawmidi_t *) arg;
 	struct pollfd wakeup;
 
 	wakeup.fd = midi->scan.wake_pipe[0];
@@ -820,7 +820,7 @@ void jack_process(midi_stream_t *str, jack_nframes_t nframes)
 static
 void *midi_thread(void *arg)
 {
-	midi_stream_t *str = arg;
+	midi_stream_t *str = (midi_stream_t *) arg;
 	alsa_rawmidi_t *midi = str->owner;
 	struct pollfd pfds[MAX_PFDS];
 	int npfds;

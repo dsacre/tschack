@@ -48,6 +48,10 @@ extern void store_wait_time (int);
 extern void show_wait_times ();
 extern void show_work_times ();
 
+// XXX:
+#define PRIu32 "u"
+#define PRIu64 "lu"
+
 #undef DEBUG_WAKEUP
 
 /* Delay (in process calls) before jackd will report an xrun */
@@ -863,7 +867,7 @@ alsa_driver_set_parameters (alsa_driver_t *driver,
 	driver->poll_timeout = (int) floor (1.5f * driver->period_usecs);
 
 	if (driver->engine) {
-		if (driver->engine->set_buffer_size (driver->engine,
+		if (driver->engine->_set_buffer_size (driver->engine,
 						     driver->frames_per_cycle)) {
 			jack_error ("ALSA: Cannot set engine buffer size to %d (check MIDI)", driver->frames_per_cycle);
 			return -1;
@@ -1078,10 +1082,10 @@ alsa_driver_stop (alsa_driver_t *driver)
 
 		jack_port_t* port;
 		char* buf;
-		jack_nframes_t nframes = driver->engine->control->buffer_size;
+		jack_nframes_t nframes = driver->engine->_control->buffer_size;
 
 		port = (jack_port_t *) node->data;
-		buf = jack_port_get_buffer (port, nframes);
+		buf = (char *) jack_port_get_buffer (port, nframes);
 		memset (buf, 0, sizeof (jack_default_audio_sample_t) * nframes);
 	}
 		
@@ -1121,8 +1125,8 @@ alsa_driver_restart (alsa_driver_t *driver)
 	int res;
 
 	driver->xrun_recovery = 1;
- 	if ((res = driver->nt_stop((struct _jack_driver_nt *) driver))==0)
-		res = driver->nt_start((struct _jack_driver_nt *) driver);
+ 	if ((res = driver->nt_stop((jack_driver_nt_t *) driver))==0)
+		res = driver->nt_start((jack_driver_nt_t *) driver);
 	driver->xrun_recovery = 0;
 
 	if (res && driver->midi)
@@ -1279,7 +1283,7 @@ alsa_driver_wait (alsa_driver_t *driver, int extra_fd, int *status, float
 			nfds++;
 		}
 
-		poll_enter = driver->engine->get_microseconds ();
+		poll_enter = driver->engine->_get_microseconds ();
 
 		if (poll_enter > driver->poll_next) {
 			/*
@@ -1313,7 +1317,7 @@ alsa_driver_wait (alsa_driver_t *driver, int extra_fd, int *status, float
 			
 		}
 
-		poll_ret = driver->engine->get_microseconds ();
+		poll_ret = driver->engine->_get_microseconds ();
 
 		if (extra_fd < 0) {
 			if (driver->poll_next && poll_ret > driver->poll_next) {
@@ -1321,7 +1325,7 @@ alsa_driver_wait (alsa_driver_t *driver, int extra_fd, int *status, float
 			} 
 			driver->poll_last = poll_ret;
 			driver->poll_next = poll_ret + driver->period_usecs;
-			driver->engine->transport_cycle_start (driver->engine, 
+			driver->engine->_transport_cycle_start (driver->engine, 
 							       poll_ret);
 		}
 
@@ -1546,7 +1550,7 @@ alsa_driver_read (alsa_driver_t *driver, jack_nframes_t nframes)
 		return -1;
 	}
 	
-	if (driver->engine->freewheeling) {
+	if (driver->engine->_freewheeling) {
 		return 0;
 	}
 
@@ -1582,7 +1586,7 @@ alsa_driver_read (alsa_driver_t *driver, jack_nframes_t nframes)
 				/* no-copy optimization */
 				continue;
 			}
-			buf = jack_port_get_buffer (port, orig_nframes);
+			buf = (jack_default_audio_sample_t *) jack_port_get_buffer (port, orig_nframes);
 			alsa_driver_read_from_channel (driver, chn,
 				buf + nread, contiguous);
 		}
@@ -1618,7 +1622,7 @@ alsa_driver_write (alsa_driver_t* driver, jack_nframes_t nframes)
 
 	driver->process_count++;
 
-	if (!driver->playback_handle || driver->engine->freewheeling) {
+	if (!driver->playback_handle || driver->engine->_freewheeling) {
 		return 0;
 	}
 	if (nframes > driver->frames_per_cycle) {
@@ -1673,7 +1677,7 @@ alsa_driver_write (alsa_driver_t* driver, jack_nframes_t nframes)
 			if (!jack_port_connected (port)) {
 				continue;
 			}
-			buf = jack_port_get_buffer (port, orig_nframes);
+			buf = (jack_default_audio_sample_t *) jack_port_get_buffer (port, orig_nframes);
 			alsa_driver_write_to_channel (driver, chn,
 				buf + nwritten, contiguous);
 
@@ -1682,7 +1686,7 @@ alsa_driver_write (alsa_driver_t* driver, jack_nframes_t nframes)
 				if (!jack_port_connected (port)) {
 					continue;
 				}
-				monbuf = jack_port_get_buffer (port, orig_nframes);
+				monbuf = (jack_default_audio_sample_t *) jack_port_get_buffer (port, orig_nframes);
 				memcpy (monbuf + nwritten, buf + nwritten, contiguous * sizeof(jack_default_audio_sample_t));
 				mon_node = jack_slist_next (mon_node);				
 			}
@@ -1731,11 +1735,11 @@ alsa_driver_run_cycle (alsa_driver_t *driver)
 		/* we detected an xrun and restarted: notify
 		 * clients about the delay. 
 		 */
-		engine->delay (engine, delayed_usecs);
+		engine->_delay (engine, delayed_usecs);
 		return 0;
 	} 
 
-	return engine->run_cycle (engine, nframes, delayed_usecs);
+	return engine->_run_cycle (engine, nframes, delayed_usecs);
 }
 
 static int
@@ -1746,11 +1750,11 @@ alsa_driver_attach (alsa_driver_t *driver)
 	jack_port_t *port;
 	int port_flags;
 
-	if (driver->engine->set_buffer_size (driver->engine, driver->frames_per_cycle)) {
+	if (driver->engine->_set_buffer_size (driver->engine, driver->frames_per_cycle)) {
 		jack_error ("ALSA: cannot set engine buffer size for %d (check MIDI)", driver->frames_per_cycle);
 		return -1;
 	}
-	driver->engine->set_sample_rate (driver->engine, driver->frame_rate);
+	driver->engine->_set_sample_rate (driver->engine, driver->frame_rate);
 
 	port_flags = JackPortIsOutput|JackPortIsPhysical|JackPortIsTerminal;
 
@@ -2350,7 +2354,9 @@ dither_opt (char c, DitherAlgorithm* dither)
 
 /* DRIVER "PLUGIN" INTERFACE */
 
-const char driver_client_name[] = "alsa_pcm";
+extern "C" {
+
+char * driver_client_name = "alsa_pcm";
 
 const jack_driver_desc_t *
 driver_get_descriptor ()
@@ -2359,12 +2365,12 @@ driver_get_descriptor ()
 	jack_driver_param_desc_t * params;
 	unsigned int i;
 
-	desc = calloc (1, sizeof (jack_driver_desc_t));
+	desc = (jack_driver_desc_t *) calloc (1, sizeof (jack_driver_desc_t));
 
 	strcpy (desc->name,"alsa");
 	desc->nparams = 18;
   
-	params = calloc (desc->nparams, sizeof (jack_driver_param_desc_t));
+	params = (jack_driver_param_desc_t *) calloc (desc->nparams, sizeof (jack_driver_param_desc_t));
 
 	i = 0;
 	strcpy (params[i].name, "capture");
@@ -2675,4 +2681,6 @@ void
 driver_finish (jack_driver_t *driver)
 {
 	alsa_driver_delete ((alsa_driver_t *) driver);
+}
+
 }

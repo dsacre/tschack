@@ -56,7 +56,7 @@ typedef struct _jack_hardware {
     JackHardwareReleaseFunction release;
     JackHardwareGetHardwarePeak get_hardware_peak;
     JackHardwareGetHardwarePower get_hardware_power;
-    void *private;
+    void *priv;
 
 } jack_hardware_t;
 

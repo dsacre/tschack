@@ -76,6 +76,11 @@
 
 #define NSEC_PER_SEC ((int64_t)1000*1000*1000)
 
+// XXX:
+#define PRIu32 "u"
+#define PRIu64 "lu"
+#define PRId64 "ld"
+
 enum {
 	MAX_PORTS = 64,
 	MAX_EVENT_SIZE = 1024,
@@ -235,7 +240,7 @@ void stream_close(alsa_seqmidi_t *self, int dir)
 
 alsa_midi_t* alsa_seqmidi_new(jack_client_t *client, const char* alsa_name)
 {
-	alsa_seqmidi_t *self = calloc(1, sizeof(alsa_seqmidi_t));
+	alsa_seqmidi_t *self = (alsa_seqmidi_t *) calloc(1, sizeof(alsa_seqmidi_t));
 	debug_log("midi: new\n");
 	if (!self)
 		return NULL;
@@ -484,7 +489,7 @@ port_t* port_create(alsa_seqmidi_t *self, int type, snd_seq_addr_t addr, const s
 	int err;
 	int jack_caps;
 
-	port = calloc(1, sizeof(port_t));
+	port = (port_t *) calloc(1, sizeof(port_t));
 	if (!port)
 		return NULL;
 
@@ -616,7 +621,7 @@ void update_ports(alsa_seqmidi_t *self)
 static
 void* port_thread(void *arg)
 {
-	alsa_seqmidi_t *self = arg;
+	alsa_seqmidi_t *self = (alsa_seqmidi_t *) arg;
 
 	while (self->keep_walking) {
 		sem_wait(&self->port_sem);

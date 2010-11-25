@@ -30,6 +30,10 @@
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #endif
 
+// XXX:
+#define PRIu32 "u"
+#define PRIu64 "lu"
+
 //#define DBGHWDEP
 
 #ifdef DBGHWDEP
@@ -51,7 +55,7 @@ int usx2y_change_sample_clock (jack_hardware_t *hw, SampleClockMode mode)
 static void
 usx2y_release (jack_hardware_t *hw)
 {
-	usx2y_t *h = (usx2y_t *) hw->private;
+	usx2y_t *h = (usx2y_t *) hw->priv;
 
 	if (h == 0)
 		return;
@@ -71,7 +75,7 @@ usx2y_driver_get_channel_addresses_playback (alsa_driver_t *driver,
 	snd_pcm_uframes_t playback_iso_avail;
 	char *playback;
 
-	usx2y_t *h = (usx2y_t *) driver->hw->private;
+	usx2y_t *h = (usx2y_t *) driver->hw->priv;
 
 	if (0 > h->playback_iso_start) {
 		int bytes = driver->playback_sample_bytes * 2 * driver->frames_per_cycle *
@@ -139,7 +143,7 @@ usx2y_driver_get_channel_addresses_capture (alsa_driver_t *driver,
 	snd_pcm_uframes_t capture_iso_avail;
 	int capture_offset;
 
-	usx2y_t *h = (usx2y_t *) driver->hw->private;
+	usx2y_t *h = (usx2y_t *) driver->hw->priv;
 
 	if (0 > h->capture_iso_start) {
 		iso = h->hwdep_pcm_shm->capture_iso_start;
@@ -210,7 +214,7 @@ usx2y_driver_start (alsa_driver_t *driver)
 	int err, i;
 	snd_pcm_uframes_t poffset, pavail;
 
-	usx2y_t *h = (usx2y_t *) driver->hw->private;
+	usx2y_t *h = (usx2y_t *) driver->hw->priv;
 
 	for (i = 0; i < driver->capture_nchannels; i++)
 		// US428 channels 3+4 are on a seperate 2 channel stream.
@@ -350,7 +354,7 @@ usx2y_driver_stop (alsa_driver_t *driver)
 	JSList* node;
 	int chn;
 
-	usx2y_t *h = (usx2y_t *) driver->hw->private;
+	usx2y_t *h = (usx2y_t *) driver->hw->priv;
 
 	/* silence all capture port buffers, because we might
 	   be entering offline mode.
@@ -361,10 +365,10 @@ usx2y_driver_stop (alsa_driver_t *driver)
 
 		jack_port_t* port;
 		char* buf;
-		jack_nframes_t nframes = driver->engine->control->buffer_size;
+		jack_nframes_t nframes = driver->engine->_control->buffer_size;
 
 		port = (jack_port_t *) node->data;
-		buf = jack_port_get_buffer (port, nframes);
+		buf = (char *) jack_port_get_buffer (port, nframes);
 		memset (buf, 0, sizeof (jack_default_audio_sample_t) * nframes);
 	}
 
@@ -483,7 +487,7 @@ usx2y_driver_read (alsa_driver_t *driver, jack_nframes_t nframes)
 	int err;
 	snd_pcm_uframes_t nframes_ = nframes;
 
-	if (!driver->capture_handle || driver->engine->freewheeling) {
+	if (!driver->capture_handle || driver->engine->_freewheeling) {
 		return 0;
 	}
 
@@ -506,7 +510,7 @@ usx2y_driver_read (alsa_driver_t *driver, jack_nframes_t nframes)
 		if (!jack_port_connected (port)) {
 			continue;
 		}
-		buf[chn] = jack_port_get_buffer (port, nframes_);
+		buf[chn] = (jack_default_audio_sample_t *) jack_port_get_buffer (port, nframes_);
 	}
 
 	while (nframes) {
@@ -560,7 +564,7 @@ usx2y_driver_write (alsa_driver_t* driver, jack_nframes_t nframes)
 
 	driver->process_count++;
 
-	if (!driver->playback_handle || driver->engine->freewheeling) {
+	if (!driver->playback_handle || driver->engine->_freewheeling) {
 		return 0;
 	}
 
@@ -600,7 +604,7 @@ usx2y_driver_write (alsa_driver_t* driver, jack_nframes_t nframes)
 	for (chn = 0, node = driver->playback_ports;
 	     node; node = jack_slist_next (node), chn++) {
 		port = (jack_port_t *) node->data;
-		buf[chn] = jack_port_get_buffer (port, nframes_);
+		buf[chn] = (jack_default_audio_sample_t *) jack_port_get_buffer (port, nframes_);
 	}
 
 	while (nframes) {
@@ -660,7 +664,7 @@ jack_alsa_usx2y_hw_new (alsa_driver_t *driver)
 
 	hw->capabilities = 0;
 	hw->input_monitor_mask = 0;
-	hw->private = 0;
+	hw->priv = 0;
 
 	hw->set_input_monitor_mask = usx2y_set_input_monitor_mask;
 	hw->change_sample_clock = usx2y_change_sample_clock;
@@ -684,7 +688,7 @@ jack_alsa_usx2y_hw_new (alsa_driver_t *driver)
 			h = (usx2y_t *) malloc (sizeof (usx2y_t));
 			h->driver = driver;
 			h->hwdep_handle = hwdep_handle;
-			hw->private = h;
+			hw->priv = h;
 			/* Set our own operational function pointers. */
 			usx2y_driver_setup(driver);
 			jack_info("ALSA/USX2Y: EXPERIMENTAL hwdep pcm device %s"
