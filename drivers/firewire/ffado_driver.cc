@@ -64,19 +64,19 @@ ffado_driver_attach (ffado_driver_t *driver)
 	jack_port_t *port=NULL;
 	int port_flags;
 
-	g_verbose=driver->engine->verbose;
+	g_verbose=driver->engine->_verbose;
 
-	if (driver->engine->set_buffer_size (driver->engine, driver->period_size)) {
+	if (driver->engine->_set_buffer_size (driver->engine, driver->period_size)) {
 		jack_error ("FFADO: cannot set engine buffer size to %d (check MIDI)", driver->period_size);
 		return -1;
 	}
-	driver->engine->set_sample_rate (driver->engine, driver->sample_rate);
+	driver->engine->_set_sample_rate (driver->engine, driver->sample_rate);
 
 	/* preallocate some buffers such that they don't have to be allocated
 	   in RT context (or from the stack)
 	 */
 	/* the null buffer is a buffer that contains one period of silence */
-	driver->nullbuffer = calloc(driver->period_size, sizeof(ffado_sample_t));
+	driver->nullbuffer = (ffado_sample_t *) calloc(driver->period_size, sizeof(ffado_sample_t));
 	if(driver->nullbuffer == NULL) {
 		printError("could not allocate memory for null buffer");
 		return -1;
@@ -85,16 +85,16 @@ ffado_driver_attach (ffado_driver_t *driver)
 	memset(driver->nullbuffer, 0, driver->period_size*sizeof(ffado_sample_t));
 	
 	/* the scratch buffer is a buffer of one period that can be used as dummy memory */
-	driver->scratchbuffer = calloc(driver->period_size, sizeof(ffado_sample_t));
+	driver->scratchbuffer = (ffado_sample_t *) calloc(driver->period_size, sizeof(ffado_sample_t));
 	if(driver->scratchbuffer == NULL) {
 		printError("could not allocate memory for scratch buffer");
 		return -1;
 	}
 	
 	/* packetizer thread options */
-	driver->device_options.realtime=(driver->engine->control->real_time? 1 : 0);
+	driver->device_options.realtime=(driver->engine->_control->real_time? 1 : 0);
 	
-	driver->device_options.packetizer_priority = driver->engine->rtpriority;
+	driver->device_options.packetizer_priority = driver->engine->_rtpriority;
 	if (driver->device_options.packetizer_priority > 98) {
 		driver->device_options.packetizer_priority = 98;
 	}
@@ -122,7 +122,7 @@ ffado_driver_attach (ffado_driver_t *driver)
 	port_flags = JackPortIsOutput|JackPortIsPhysical|JackPortIsTerminal;
 
 	driver->capture_nchannels=ffado_streaming_get_nb_capture_streams(driver->dev);
-	driver->capture_channels=calloc(driver->capture_nchannels, sizeof(ffado_capture_channel_t));
+	driver->capture_channels=(ffado_capture_channel_t *)calloc(driver->capture_nchannels, sizeof(ffado_capture_channel_t));
 	if(driver->capture_channels==NULL) {
 		printError("could not allocate memory for capture channel list");
 		return -1;
@@ -172,7 +172,7 @@ ffado_driver_attach (ffado_driver_t *driver)
 			midi_unpack_init(&driver->capture_channels[chn].midi_unpack);
 			midi_unpack_reset(&driver->capture_channels[chn].midi_unpack);
 			// setup the midi buffer
-			driver->capture_channels[chn].midi_buffer = calloc(driver->period_size, sizeof(uint32_t));
+			driver->capture_channels[chn].midi_buffer = (uint32_t *)calloc(driver->period_size, sizeof(uint32_t));
 		} else {
 			printMessage ("Don't register capture port %s", buf);
 
@@ -186,7 +186,7 @@ ffado_driver_attach (ffado_driver_t *driver)
 	port_flags = JackPortIsInput|JackPortIsPhysical|JackPortIsTerminal;
 
 	driver->playback_nchannels=ffado_streaming_get_nb_playback_streams(driver->dev);
-	driver->playback_channels=calloc(driver->playback_nchannels, sizeof(ffado_playback_channel_t));
+	driver->playback_channels=(ffado_playback_channel_t *)calloc(driver->playback_nchannels, sizeof(ffado_playback_channel_t));
 	if(driver->playback_channels==NULL) {
 		printError("could not allocate memory for playback channel list");
 		return -1;
@@ -237,7 +237,7 @@ ffado_driver_attach (ffado_driver_t *driver)
 			// setup midi packer
 			midi_pack_reset(&driver->playback_channels[chn].midi_pack);
 			// setup the midi buffer
-			driver->playback_channels[chn].midi_buffer = calloc(driver->period_size, sizeof(uint32_t));
+			driver->playback_channels[chn].midi_buffer = (uint32_t *)calloc(driver->period_size, sizeof(uint32_t));
 		} else {
 			printMessage ("Don't register playback port %s", buf);
 
@@ -362,7 +362,7 @@ ffado_driver_read (ffado_driver_t * driver, jack_nframes_t nframes)
 			midi_unpack_t *midi_unpack = &driver->capture_channels[chn].midi_unpack;
 			port = (jack_port_t *) node->data;
 			nb_connections = jack_port_connected (port);
-			buf = jack_port_get_buffer (port, nframes);
+			buf = (jack_default_audio_sample_t *)jack_port_get_buffer (port, nframes);
 
 			/* if the returned buffer is invalid, discard the midi data */
 			jack_midi_clear_buffer(buf);
@@ -398,7 +398,7 @@ ffado_driver_write (ffado_driver_t * driver, jack_nframes_t nframes)
 	printEnter();
 	
 	driver->process_count++;
-	if (driver->engine->freewheeling) {
+	if (driver->engine->_freewheeling) {
 		return 0;
 	}
 
@@ -450,7 +450,7 @@ ffado_driver_write (ffado_driver_t * driver, jack_nframes_t nframes)
 			driver->playback_channels[chn].nb_overflow_bytes=0;
 			
 			/* process the events in this period */
-			buf = jack_port_get_buffer (port, nframes);
+			buf = (jack_default_audio_sample_t *)jack_port_get_buffer (port, nframes);
 			nevents = jack_midi_get_event_count(buf);
 
 			for (i=0; i<nevents; ++i) {
@@ -517,7 +517,7 @@ ffado_driver_wait (ffado_driver_t *driver, int extra_fd, int *status,
 	
 	printEnter();
 
-	wait_enter = driver->engine->get_microseconds ();
+	wait_enter = driver->engine->_get_microseconds ();
 	if (wait_enter > driver->wait_next) {
 		/*
 			* This processing cycle was delayed past the
@@ -533,14 +533,14 @@ ffado_driver_wait (ffado_driver_t *driver, int extra_fd, int *status,
 
 	response = ffado_streaming_wait(driver->dev);
 	
-	wait_ret = driver->engine->get_microseconds ();
+	wait_ret = driver->engine->_get_microseconds ();
 	
 	if (driver->wait_next && wait_ret > driver->wait_next) {
 		*delayed_usecs = wait_ret - driver->wait_next;
 	}
 	driver->wait_last = wait_ret;
 	driver->wait_next = wait_ret + driver->period_usecs;
-	driver->engine->transport_cycle_start (driver->engine, wait_ret);
+	driver->engine->_transport_cycle_start (driver->engine, wait_ret);
 	if (response == ffado_wait_ok) {
 		// all good
 		*status=0;
@@ -595,11 +595,11 @@ ffado_driver_run_cycle (ffado_driver_t *driver)
 		/* we detected an xrun and restarted: notify
 		 * clients about the delay. */
 		printMessage("xrun detected");
-		engine->delay (engine, delayed_usecs);
+		engine->_delay (engine, delayed_usecs);
 		return 0;
 	} 
 	
-	return engine->run_cycle (engine, nframes, delayed_usecs);
+	return engine->_run_cycle (engine, nframes, delayed_usecs);
 
 }
 /*
@@ -614,7 +614,7 @@ ffado_driver_null_cycle (ffado_driver_t* driver, jack_nframes_t nframes)
 
 	printEnter();
 	
-	if (driver->engine->freewheeling) {
+	if (driver->engine->_freewheeling) {
 		return 0;
 	}
 
@@ -708,7 +708,7 @@ ffado_driver_new (jack_client_t * client,
 
 	printMessage("Starting firewire backend (%s)", ffado_get_version());
 
-	driver = calloc (1, sizeof (ffado_driver_t));
+	driver = (ffado_driver_t *)calloc (1, sizeof (ffado_driver_t));
 
 	/* Setup the jack interfaces */  
 	jack_driver_nt_init ((jack_driver_nt_t *) driver);
@@ -748,7 +748,7 @@ ffado_driver_new (jack_client_t * client,
 	driver->device_options.verbose=params->verbose_level;
 	
 	driver->device_info.nb_device_spec_strings=1;
-	driver->device_info.device_spec_strings=calloc(1, sizeof(char *));
+	driver->device_info.device_spec_strings=(char **)calloc(1, sizeof(char *));
 	driver->device_info.device_spec_strings[0]=strdup(params->device_info);
 	
 	debugPrint(DEBUG_LEVEL_STARTUP, " Driver compiled on %s %s for FFADO %s (API version %d)",
@@ -787,12 +787,12 @@ driver_get_descriptor ()
 	jack_driver_param_desc_t * params;
 	unsigned int i;
 
-	desc = calloc (1, sizeof (jack_driver_desc_t));
+	desc = (jack_driver_desc_t *) calloc (1, sizeof (jack_driver_desc_t));
 
 	strcpy (desc->name, "firewire");
 	desc->nparams = 11;
   
-	params = calloc (desc->nparams, sizeof (jack_driver_param_desc_t));
+	params = (jack_driver_param_desc_t *)calloc (desc->nparams, sizeof (jack_driver_param_desc_t));
 	desc->params = params;
 
 	i = 0;

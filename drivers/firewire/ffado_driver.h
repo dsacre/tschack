@@ -55,8 +55,8 @@
 #include <jack/ringbuffer.h>
 #include <jack/thread.h>
 
-#include <../alsa-midi/midi_pack.h>
-#include <../alsa-midi/midi_unpack.h>
+#include <alsa-midi/midi_pack.h>
+#include <alsa-midi/midi_unpack.h>
 
 // debug print control flags
 #define DEBUG_LEVEL_BUFFERS           	(1<<0)

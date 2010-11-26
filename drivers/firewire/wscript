@@ -1,0 +1,16 @@
+#! /usr/bin/env python
+
+def configure(conf):
+    conf.check_cfg( package="ffado", args="--cflags --libs" )
+
+def build(bld):
+	driver = bld.new_task_gen(
+		    features = 'cxx cshlib',
+		    source = 'ffado_driver.cc',
+		    target = 'firewire',
+		    includes = "../../drivers ../.. ../../config",
+		    uselib = ['FFADO'],
+		    lib = ['dl', 'pthread', 'rt'] )
+
+	driver.env['shlib_PATTERN'] = 'jack_%s.so'
+
