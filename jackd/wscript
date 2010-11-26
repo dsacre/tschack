@@ -1,22 +1,21 @@
 #! /usr/bin/env python
 
 def configure(conf):
-    conf.check_cfg( package="gtkmm-2.4", args="--cflags --libs" )
-    conf.check_cfg( package="jack", args="--cflags --libs" )
+    pass
 
 def build(bld):
 	bld.new_task_gen(
 		features = 'cxx cshlib',
 		source = 'engine.cc clientengine.cc transengine.cc controlapi.cc',
 		target = 'jackserver',
-		includes = ".. ../config",
+		includes = ". .. ../config",
 		lib = ['dl', 'pthread'] )
 
 	bld.new_task_gen(
 		features = 'cxx cprogram',
 		source = 'jackd.cc',
 		target = 'jackd',
-		includes = ".. ../config",
+		includes = ". .. ../config",
 		uselib_local = [ "jackserver", "jack" ],
 		lib = ['dl', 'pthread'] )
 

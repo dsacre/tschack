@@ -1,0 +1,23 @@
+#! /usr/bin/env python
+
+def configure(conf):
+    conf.check_cfg( package="sndfile", args="--cflags --libs" )
+
+def new_example( bld, src, tgt ):
+	bld.new_task_gen(
+		features = 'cc cprogram',
+		source = src,
+		target = tgt,
+		includes = ". .. ../config",
+		uselib_local = [ "jack" ],
+		uselib = ['SNDFILE'], 
+		lib = ['dl', 'pthread'] )
+
+
+def build(bld):
+	new_example( bld, 'simple_client.c', 'jack_simple_client' )
+	new_example( bld, 'metro.c', 'jack_metro' )
+	new_example( bld, 'transport_client.c', 'jack_transport_client' )
+	new_example( bld, 'capture_client.c', 'jack_rec' )
+
+

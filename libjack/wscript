@@ -8,7 +8,7 @@ def build(bld):
 		features = 'cxx cshlib',
 		source = 'client.cc driver.cc intclient.cc messagebuffer.cc midiport.cc pool.cc port.cc ringbuffer.cc sanitycheck.cc shm.cc simd.cc systemtest.cc thread.cc time.cc timestamps.cc transclient.cc unlock.cc',
 		target = 'jack',
-		includes = ".. ../config",
+		includes = ". .. ../config",
 		lib = ['dl', 'pthread', 'rt'] )
 
 
