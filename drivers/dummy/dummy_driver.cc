@@ -169,7 +169,7 @@ static jack_nframes_t
 dummy_driver_wait (dummy_driver_t *driver, int extra_fd, int *status,
 		   float *delayed_usecs)
 {
-	jack_time_t now = driver->engine->get_microseconds();
+	jack_time_t now = driver->engine->_get_microseconds();
 
 	if (driver->next_time < now) {
 		if (driver->next_time == 0) {
@@ -189,14 +189,16 @@ dummy_driver_wait (dummy_driver_t *driver, int extra_fd, int *status,
 		}
 	} else {
 		jack_time_t wait = driver->next_time - now;
-		struct timespec ts = { .tv_sec = wait / 1000000,
-				       .tv_nsec = (wait % 1000000) * 1000 };
+		struct timespec ts;
+	       	ts.tv_sec = wait / 1000000;
+		ts.tv_nsec = (wait % 1000000) * 1000;
+
 		nanosleep(&ts,NULL);
 		driver->next_time += driver->wait_time;
 	}
 
-	driver->last_wait_ust = driver->engine->get_microseconds ();
-	driver->engine->transport_cycle_start (driver->engine,
+	driver->last_wait_ust = driver->engine->_get_microseconds ();
+	driver->engine->_transport_cycle_start (driver->engine,
 					       driver->last_wait_ust);
 
 	/* this driver doesn't work so well if we report a delay */
