@@ -65,3 +65,5 @@ tools/jack_thread_wait
 tools/jack_transport
 tools/jack_unload
 tools/jackrec
+build/
+.waf-1.5.10-470a6353112b965a8e14982b8c571494/
