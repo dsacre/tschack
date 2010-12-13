@@ -17,21 +17,21 @@ def set_options(opt):
     # options provided by the modules
     opt.tool_options('compiler_cxx')
     opt.tool_options('compiler_cc')
-
-    opt.add_option('--libdir', type='string', help="Library directory [Default: <prefix>/lib]")
+    opt.tool_options('gnu_dirs')
+    opt.tool_options('misc')
 
 def configure(conf):
     conf.check_tool('compiler_cxx')
     conf.check_tool('compiler_cc')
+    conf.check_tool('gnu_dirs')
+    conf.check_tool('misc')
+
     conf.env.CXXFLAGS = [ '-O3', '-g']
 
-    if Options.options.libdir:
-	conf.env['LIBDIR'] = Options.options.libdir
-    else:
-	conf.env['LIBDIR'] = os.path.join( conf.env['PREFIX'], 'lib' )
 
+    print conf.env['LIBDIR']
     conf.define( 'ADDON_DIR', os.path.join( conf.env['LIBDIR'], 'jack' ) )
-    conf.define( 'JACK_LOCATION', os.path.join( conf.env['PREFIX'], 'bin' ) )
+    conf.define( 'JACK_LOCATION', conf.env['BINDIR'] )
     conf.define( 'VERSION', VERSION )
     conf.define( 'DEFAULT_TMP_DIR', '/dev/shm' )
     conf.define( 'PROTOCOL_VERSION', '100' )
@@ -55,4 +55,9 @@ def build(bld):
     bld.add_subdirs('example-clients')
     bld.add_subdirs('tools')
 
+    # create the jack.pc file for pkg-config
+    jackpc = bld.new_task_gen('subst')
+    jackpc.source = 'jack.pc.in'
+    jackpc.target = 'jack.pc'
+    jackpc.install_path = '${PREFIX}/lib/pkgconfig'
 
