@@ -199,6 +199,8 @@ typedef struct {
     float		  max_delayed_usecs;
     uint32_t		  port_max;
     int32_t		  engine_ok;
+    int32_t               cgroups_enabled;
+    char		  current_cgroup[JACK_PORT_NAME_SIZE];
     jack_port_type_id_t	  n_port_types;
     jack_port_type_info_t port_types[JACK_MAX_PORT_TYPES];
     jack_port_shared_t    ports[0];

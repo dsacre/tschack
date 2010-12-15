@@ -753,6 +753,16 @@ fi
 AC_SUBST(NETJACK_LIBS)
 AC_SUBST(NETJACK_CFLAGS)
 
+PKG_CHECK_MODULES(CGROUP, libcgroup,[HAVE_CGROUP=true], [HAVE_CGROUP=false])
+if test x$HAVE_CGROUP = xfalse; then
+	AC_DEFINE(HAVE_CGROUP,0,"Whether libcgroup is available")
+else
+	AC_DEFINE(HAVE_CGROUP,1,"Whether libcgroup is available")
+fi
+
+AC_SUBST(CGROUP_LIBS)
+AC_SUBST(CGROUP_CFLAGS)
+
 # Note: A bug in pkg-config causes problems if the first occurence of
 # PKG_CHECK_MODULES can be disabled. So, if you're going to use
 # PKG_CHECK_MODULES inside a --disable-whatever check, you need to

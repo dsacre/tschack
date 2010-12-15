@@ -62,6 +62,10 @@
 #include <sysdeps/pThreadUtilities.h>
 #endif
 
+#if HAVE_CGROUP
+#include <libcgroup.h>
+#endif
+
 static pthread_mutex_t client_lock;
 static pthread_cond_t  client_ready;
 
@@ -1123,6 +1127,14 @@ jack_client_open_aux (const char *client_name,
 	client->control = (jack_client_control_t *)
 		jack_shm_addr (&client->control_shm);
 
+#if HAVE_CGROUP
+	if (client->engine->cgroups_enabled) {
+		int res = cgroup_init ();
+		if (res != 0) {
+			jack_error ("error initialising libcgroups: %d", res);
+		}
+	}
+#endif
 	/* Nobody else needs to access this shared memory any more, so
 	 * destroy it.  Because we have it attached, it won't vanish
 	 * till we exit (and release it).
