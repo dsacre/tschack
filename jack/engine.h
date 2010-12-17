@@ -180,7 +180,7 @@ jack_engine_t  *jack_engine_new (int real_time, int real_time_priority,
 				 const char *server_name, int temporary,
 				 int verbose, int client_timeout,
 				 unsigned int port_max,
-                                 pid_t waitpid, jack_nframes_t frame_time_offset, int nozombies, 
+                                 pid_t waitpid, jack_nframes_t frame_time_offset, int nozombies, char *cgroup_name,
 				 JSList *drivers);
 void		jack_engine_delete (jack_engine_t *);
 int		jack_run (jack_engine_t *engine);
