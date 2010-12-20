@@ -67,7 +67,12 @@ static unsigned int port_max = 256;
 static int do_unlock = 0;
 static jack_nframes_t frame_time_offset = 0;
 static int nozombies = 0;
+#ifdef DEFAULT_CGROUP
+static char * cgroup_name = DEFAULT_CGROUP;
+#else
 static char * cgroup_name = NULL;
+#endif
+
 
 extern int sanitycheck (int, int);
 
