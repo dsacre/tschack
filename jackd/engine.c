@@ -1781,7 +1781,7 @@ jack_engine_setup_cgroup_info (jack_engine_t *engine, char *cgroup_name)
 
 	if (res==0) {
 		char *current_controller;
-		if (cgroup_name) {
+		if (cgroup_name && strlen(cgroup_name)) {
 			res = cgroup_change_cgroup_path (cgroup_name, getpid(), controllers);
 			if (res != 0) {
 				jack_error ("failed to join cgroup %s : error %d\n", cgroup_name, res);
