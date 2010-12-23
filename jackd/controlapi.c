@@ -164,6 +164,7 @@ static
 struct jackctl_parameter *
 jackctl_add_parameter(
     JSList ** parameters_list_ptr_ptr,
+    char id,
     const char * name,
     const char * short_description,
     const char * long_description,
@@ -205,7 +206,7 @@ jackctl_add_parameter(
 
     parameter_ptr->driver_ptr = NULL;
     parameter_ptr->driver_parameter_ptr = NULL;
-    parameter_ptr->id = 0;
+    parameter_ptr->id = id;
     parameter_ptr->constraint_ptr = constraint_ptr;
 
     *parameters_list_ptr_ptr = jack_slist_append(*parameters_list_ptr_ptr, parameter_ptr);
@@ -285,6 +286,7 @@ jackctl_add_driver_parameters(
 
         parameter_ptr = jackctl_add_parameter(
             &driver_ptr->parameters,
+	    descriptor_ptr->character,
             descriptor_ptr->name,
             descriptor_ptr->short_desc,
             descriptor_ptr->long_desc,
@@ -300,7 +302,6 @@ jackctl_add_driver_parameters(
         }
 
         parameter_ptr->driver_ptr = driver_ptr;
-        parameter_ptr->id = descriptor_ptr->character;
     }
 
     return true;
@@ -580,6 +581,7 @@ jackctl_internals_load(
     JSList *node_ptr;
     JSList *descriptor_node_ptr = NULL;
 
+    //XXX: jack1 doesnt support internals enumeration.
     //descriptor_node_ptr = jack_internals_load(NULL);
     if (descriptor_node_ptr == NULL)
     {
@@ -899,6 +901,7 @@ jackctl_server_t * jackctl_server_create(
     strcpy(value.str, jack_default_server_name() );
     if (jackctl_add_parameter(
             &server_ptr->parameters,
+	    'n',
             "name",
             "Server name to use.",
             "",
@@ -913,6 +916,7 @@ jackctl_server_t * jackctl_server_create(
     value.b = false;
     if (jackctl_add_parameter(
             &server_ptr->parameters,
+	    'R',
             "realtime",
             "Whether to use realtime mode.",
             "Use realtime scheduling. This is needed for reliable low-latency performance. On most systems, it requires JACK to run with special scheduler and memory allocation privileges, which may be obtained in several ways. On Linux you should use PAM.",
@@ -927,6 +931,7 @@ jackctl_server_t * jackctl_server_create(
     value.i = 10;
     if (jackctl_add_parameter(
             &server_ptr->parameters,
+	    'P',
             "realtime-priority",
             "Scheduler priority when running in realtime mode.",
             "",
@@ -943,6 +948,7 @@ jackctl_server_t * jackctl_server_create(
     value.b = false;
     if (jackctl_add_parameter(
             &server_ptr->parameters,
+	    'T',
             "temporary",
             "Exit once all clients have closed their connections.",
             "",
@@ -957,6 +963,7 @@ jackctl_server_t * jackctl_server_create(
     value.b = false;
     if (jackctl_add_parameter(
             &server_ptr->parameters,
+	    'v',
             "verbose",
             "Verbose mode.",
             "",
@@ -971,6 +978,7 @@ jackctl_server_t * jackctl_server_create(
     value.i = 0;
     if (jackctl_add_parameter(
             &server_ptr->parameters,
+	    't',
             "client-timeout",
             "Client timeout limit in milliseconds.",
             "",
@@ -985,6 +993,7 @@ jackctl_server_t * jackctl_server_create(
     value.ui = 0;
     if (jackctl_add_parameter(
             &server_ptr->parameters,
+	    'c',
             "clock-source",
             "Clocksource type : c(ycle) | h(pet) | s(ystem).",
             "",
@@ -999,6 +1008,7 @@ jackctl_server_t * jackctl_server_create(
     value.ui = 128;
     if (jackctl_add_parameter(
           &server_ptr->parameters,
+	  'p',
           "port-max",
           "Maximum number of ports.",
           "",
@@ -1013,6 +1023,7 @@ jackctl_server_t * jackctl_server_create(
     value.b = false;
     if (jackctl_add_parameter(
             &server_ptr->parameters,
+	    '\0',
             "replace-registry",
             "Replace shared memory registry.",
             "",
@@ -1027,6 +1038,7 @@ jackctl_server_t * jackctl_server_create(
     value.b = false;
     if (jackctl_add_parameter(
             &server_ptr->parameters,
+	    'm',
             "mlock",
             "Use mlock.",
             "",
@@ -1041,6 +1053,7 @@ jackctl_server_t * jackctl_server_create(
     value.b = false;
     if (jackctl_add_parameter(
             &server_ptr->parameters,
+	    'u',
             "unlock",
             "munlock memory for big libraries",
             "",
@@ -1055,6 +1068,7 @@ jackctl_server_t * jackctl_server_create(
     value.b = false;
     if (jackctl_add_parameter(
             &server_ptr->parameters,
+	    'Z',
             "nozombies",
             "dont zombifiy offending clients",
             "",
@@ -1069,6 +1083,7 @@ jackctl_server_t * jackctl_server_create(
     value.ui = 0;
     if (jackctl_add_parameter(
             &server_ptr->parameters,
+	    'C',
             "timeout-threshold",
             "threshold for suspending processing",
             "",
@@ -1487,54 +1502,24 @@ bool jackctl_server_load_internal(
     jackctl_server_t * server_ptr,
     jackctl_internal_t * internal)
 {
-#if 0
-    int status;
-    if (server_ptr->engine != NULL) {
-        server_ptr->engine->InternalClientLoad(internal->desc_ptr->name, internal->desc_ptr->name, internal->set_parameters, JackNullOption, &internal->refnum, -1, &status);
-        return (internal->refnum > 0);
-    } else {
-        return false;
-    }
-#endif
+	return false;
 }
 
 bool jackctl_server_unload_internal(
     jackctl_server_t * server_ptr,
     jackctl_internal_t * internal)
 {
-#if 0
-    int status;
-    if (server_ptr->engine != NULL && internal->refnum > 0) {
-        return ((server_ptr->engine->GetEngine()->InternalClientUnload(internal->refnum, &status)) == 0);
-    } else {
-        return false;
-    }
-#endif
+	return false;
 }
 
 bool jackctl_server_add_slave(jackctl_server_t * server_ptr, jackctl_driver_t * driver_ptr)
 {
-#if 0
-    if (server_ptr->engine != NULL) {
-        driver_ptr->info = server_ptr->engine->AddSlave(driver_ptr->desc_ptr, driver_ptr->set_parameters);
-        return (driver_ptr->info != 0);
-    } else {
-        return false;
-    }
-#endif
+	return false;
 }
 
 bool jackctl_server_remove_slave(jackctl_server_t * server_ptr, jackctl_driver_t * driver_ptr)
 {
-#if 0
-    if (server_ptr->engine != NULL) {
-        server_ptr->engine->RemoveSlave(driver_ptr->info);
-        delete driver_ptr->info;
-        return true;
-    } else {
-        return false;
-    }
-#endif
+	return false;
 }
 
 bool jackctl_server_switch_master(jackctl_server_t * server_ptr, jackctl_driver_t * driver_ptr)
