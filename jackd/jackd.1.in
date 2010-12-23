@@ -99,6 +99,10 @@ Exit once all clients have closed their connections.
 Set client timeout limit in milliseconds.  The default is 500 msec.
 In realtime mode the client timeout must be smaller than the watchdog timeout (5000 msec).
 .TP
+\fB\-g, \-\-cgroup\fR \fIcgroup\-name\fR
+.br
+This option makes the jackd client join a specific cgroup. All client RT threads will also join this cgroup.
+.TP
 \fB\-Z, \-\-nozombies\fR
 .br
 Prevent JACK from ever kicking out clients because they were too slow.

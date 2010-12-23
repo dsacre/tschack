@@ -39,6 +39,12 @@
 #include <sysdeps/pThreadUtilities.h>
 #endif
 
+#if HAVE_CGROUP
+#include <sys/types.h>
+#include <sys/syscall.h>
+#include <libcgroup.h>
+#endif
+
 jack_thread_creator_t jack_thread_creator = pthread_create;
 
 void
@@ -97,6 +103,17 @@ maybe_get_capabilities (jack_client_t* client)
 		}
 	}
 #endif /* USE_CAPABILITIES */
+#if HAVE_CGROUP
+	if (client && client->engine->cgroups_enabled ) {
+		int res;
+		const char * const controllers [] = { "cpu", NULL };
+
+		res = cgroup_change_cgroup_path (client->engine->current_cgroup, syscall( SYS_gettid ), controllers);
+		if (res != 0) {
+			jack_error ("failed to join cgroup %s : error %d\n", client->engine->current_cgroup, res);
+		}
+	}
+#endif
 }	
 
 static void*

@@ -200,7 +200,7 @@ jack_engine_t  *jack_engine_new (int real_time, int real_time_priority,
 				 int verbose, int client_timeout,
 				 unsigned int port_max,
                                  pid_t waitpid, jack_nframes_t frame_time_offset, int nozombies, int jobs,
-				 int timeout_count_threshold,
+				 int timeout_count_threshold, char *cgroup_name,
 				 JSList *drivers);
 void		jack_engine_delete (jack_engine_t *);
 int		jack_run (jack_engine_t *engine);

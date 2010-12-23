@@ -683,6 +683,17 @@ fi
 AC_SUBST(DEFAULT_TMP_DIR)
 AC_DEFINE_UNQUOTED(DEFAULT_TMP_DIR,"$DEFAULT_TMP_DIR",[Default tmp directory])
 
+# allow specifying default cgroup
+AC_ARG_WITH(default-cgroup,
+            AC_HELP_STRING([--with-default-cgroup],[specify the default cgroup, into which jackd will automatically join]))
+
+if test "x$with_default_cgroup" = "x" ; then
+	DEFAULT_CGROUP=
+else
+	DEFAULT_CGROUP=$with_default_cgroup
+	AC_DEFINE_UNQUOTED(DEFAULT_CGROUP,"$DEFAULT_CGROUP",[Default cgroup])
+fi
+
 # Check for barrier functions in the pthreads library.  The default
 # option setting may be OS-dependent, otherwise it's "yes".
 test "x$USE_BARRIER" = "x" && USE_BARRIER="yes"
@@ -752,6 +763,16 @@ fi
 
 AC_SUBST(NETJACK_LIBS)
 AC_SUBST(NETJACK_CFLAGS)
+
+PKG_CHECK_MODULES(CGROUP, libcgroup,[HAVE_CGROUP=true], [HAVE_CGROUP=false])
+if test x$HAVE_CGROUP = xfalse; then
+	AC_DEFINE(HAVE_CGROUP,0,"Whether libcgroup is available")
+else
+	AC_DEFINE(HAVE_CGROUP,1,"Whether libcgroup is available")
+fi
+
+AC_SUBST(CGROUP_LIBS)
+AC_SUBST(CGROUP_CFLAGS)
 
 # Note: A bug in pkg-config causes problems if the first occurence of
 # PKG_CHECK_MODULES can be disabled. So, if you're going to use
