@@ -69,6 +69,12 @@ static jack_nframes_t frame_time_offset = 0;
 static int nozombies = 0;
 static int jobs = 32;
 static int timeout_count_threshold = 0;
+#ifdef DEFAULT_CGROUP
+static char * cgroup_name = DEFAULT_CGROUP;
+#else
+static char * cgroup_name = NULL;
+#endif
+
 
 extern int sanitycheck (int, int);
 
@@ -152,7 +158,7 @@ jack_main (jack_driver_desc_t * driver_desc, JSList * driver_params)
 				       do_mlock, do_unlock, server_name,
 				       temporary, verbose, client_timeout,
 				       port_max, getpid(), frame_time_offset, 
-				       nozombies, timeout_count_threshold, jobs, drivers)) == 0) {
+				       nozombies, timeout_count_threshold, jobs, cgroup_name, drivers)) == 0) {
 		jack_error ("cannot create engine");
 		return -1;
 	}
@@ -524,7 +530,7 @@ main (int argc, char *argv[])
 	int do_sanity_checks = 1;
 	int show_version = 0;
 
-	const char *options = "-d:P:uvshVrRZTFlt:mM:n:Np:c:j:C::";
+	const char *options = "-d:P:uvshVrRZTFlt:mM:n:Np:c:j:C:g:";
 	struct option long_options[] = 
 	{ 
 		/* keep ordered by single-letter option code */
@@ -552,6 +558,7 @@ main (int argc, char *argv[])
 		{ "verbose", 0, 0, 'v' },
 		{ "nozombies", 0, 0, 'Z' },
 		{ "timeout-thres", 2, 0, 'C' },
+		{ "cgroup", 1, 0, 'g' },
 		{ 0, 0, 0, 0 }
 	};
 	int opt = 0;
@@ -676,6 +683,9 @@ main (int argc, char *argv[])
 
 		case 'Z':
 			nozombies = 1;
+			break;
+		case 'g':
+			cgroup_name = optarg;
 			break;
 
 		default:

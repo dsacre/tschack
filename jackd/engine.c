@@ -64,6 +64,10 @@
 
 #include "libjack/local.h"
 
+#if HAVE_CGROUP
+#include <libcgroup.h>
+#endif
+
 typedef struct {
 
     jack_port_internal_t *source;
@@ -1768,11 +1772,44 @@ jack_server_thread (void *arg)
 	return 0;
 }
 
+#if HAVE_CGROUP
+static void 
+jack_engine_setup_cgroup_info (jack_engine_t *engine, char *cgroup_name)
+{
+	const char * const controllers [] = { "cpu", NULL };
+	int res = cgroup_init();
+
+	if (res==0) {
+		char *current_controller;
+		if (cgroup_name) {
+			res = cgroup_change_cgroup_path (cgroup_name, getpid(), controllers);
+			if (res != 0) {
+				jack_error ("failed to join cgroup %s : error %d\n", cgroup_name, res);
+				engine->control->cgroups_enabled = 0;
+			} else {
+				VERBOSE (engine, "joined cgroup %s\n", cgroup_name);
+				strncpy (engine->control->current_cgroup, cgroup_name, sizeof(engine->control->current_cgroup));
+				engine->control->cgroups_enabled = 1;
+			}
+		} else {
+			cgroup_get_current_controller_path (getpid(), "cpu", &current_controller);
+			VERBOSE (engine, "current_cgroup = %s\n", current_controller);
+
+			strncpy (engine->control->current_cgroup, current_controller, sizeof(engine->control->current_cgroup));
+			engine->control->cgroups_enabled = 1;
+		}
+	} else {
+		jack_error ("libcgroup failed to initialise, error %d trying without", res);
+		engine->control->cgroups_enabled = 0;
+	}
+}
+#endif
+
 jack_engine_t *
 jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 		 const char *server_name, int temporary, int verbose,
 		 int client_timeout, unsigned int port_max, pid_t wait_pid,
-		 jack_nframes_t frame_time_offset, int nozombies, int timeout_count_threshold, int jobs, JSList *drivers)
+		 jack_nframes_t frame_time_offset, int nozombies, int timeout_count_threshold, int jobs, char *cgroup_name, JSList *drivers)
 {
 	jack_engine_t *engine;
 	unsigned int i;
@@ -2053,6 +2090,9 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 #endif /* JACK_USE_MACH_THREADS */
         
         
+#if HAVE_CGROUP
+	jack_engine_setup_cgroup_info (engine, cgroup_name);
+#endif
 #ifdef USE_CAPABILITIES
 	if (uid == 0 || euid == 0) {
 		VERBOSE (engine, "running with uid=%d and euid=%d, "
