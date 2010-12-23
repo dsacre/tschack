@@ -1,0 +1,36 @@
+#! /usr/bin/env python
+
+def configure(conf):
+    conf.check_cfg( package="samplerate", args="--cflags --libs" )
+
+def new_tool( bld, src, tgt ):
+	bld.new_task_gen(
+		features = 'cc cprogram',
+		source = src,
+		target = tgt,
+		includes = ". .. ../config",
+		uselib_local = [ "jack" ],
+		uselib = ['SNDFILE'], 
+		lib = ['dl', 'pthread'] )
+
+
+def build(bld):
+	new_tool( bld, 'alias.c', 'jack_alias' )
+#	new_tool( bld, 'alsa_in.c', 'alsa_in' )
+#	new_tool( bld, 'alsa_out.c', 'alsa_out' )
+	new_tool( bld, 'bufsize.c', 'jack_bufsize' )
+	new_tool( bld, 'connect.c', 'jack_connect' )
+	new_tool( bld, 'evmon.c', 'jack_evmon' )
+	new_tool( bld, 'freewheel.c', 'jack_freewheel' )
+	new_tool( bld, 'ipload.c', 'jack_ipload' )
+	new_tool( bld, 'ipunload.c', 'jack_ipunload' )
+	new_tool( bld, 'load_test.c', 'jack_load_test' )
+	new_tool( bld, 'lsp.c', 'jack_lsp' )
+	new_tool( bld, 'midi_dump.c', 'jack_midi_dump' )
+	new_tool( bld, 'monitor_client.c', 'jack_monitor_client' )
+#	new_tool( bld, 'netsource.c', 'jack_netsource' )
+	new_tool( bld, 'samplerate.c', 'jack_samplerate' )
+	new_tool( bld, 'session_notify.c', 'jack_session_notify' )
+#	new_tool( bld, 'transport.c', 'jack_transport' )
+	new_tool( bld, 'tw.c', 'jack_tw' )
+	new_tool( bld, 'wait.c', 'jack_wait' )
