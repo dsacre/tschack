@@ -112,11 +112,14 @@ alsa_driver_check_card_type (alsa_driver_t *driver)
 		/* the user wants a hw or plughw device, the ctl name
 		 * should be hw:x where x is the card number */
 	
-		char tmp[5];
+		char tmp[16];
 		strncpy(tmp,strstr(driver->alsa_name_playback,"hw"),4);
 		tmp[4]='\0';
 		jack_info("control device %s",tmp);
 		ctl_name = strdup(tmp);
+
+		snprintf (tmp, sizeof(tmp), "Audio%s", ctl_name+3);
+		driver->reservation_name = strdup(tmp);
 	} else {
 		ctl_name = strdup(driver->alsa_name_playback);
 	}
@@ -1974,6 +1977,15 @@ alsa_driver_delete (alsa_driver_t *driver)
 		driver->hw->release (driver->hw);
 		driver->hw = 0;
 	}
+
+	if (driver->reservation_name) {
+		if (driver->engine->on_device_release) {
+			VERBOSE (driver->engine, "releasing %s", driver->reservation_name);
+			driver->engine->on_device_release (driver->reservation_name);
+		}
+		free (driver->reservation_name);
+	}
+
 	free(driver->alsa_name_playback);
 	free(driver->alsa_name_capture);
 	free(driver->alsa_driver);
@@ -2054,6 +2066,7 @@ alsa_driver_new (char *name, char *playback_alsa_device,
 	driver->playback_interleave_skip = NULL;
 	driver->capture_interleave_skip = NULL;
 
+	driver->reservation_name = NULL;
 
 	driver->silent = 0;
 	driver->all_monitor_in = FALSE;
@@ -2091,6 +2104,18 @@ alsa_driver_new (char *name, char *playback_alsa_device,
 	if (alsa_driver_check_card_type (driver)) {
 		alsa_driver_delete (driver);
 		return NULL;
+	}
+
+	if (driver->reservation_name && driver->engine->on_device_acquire) {
+		if (driver->engine->on_device_acquire (driver->reservation_name)) {
+			VERBOSE(driver->engine, "acquired device %s", driver->reservation_name);
+		} else {
+			jack_error ("failed to acquire device %s", driver->reservation_name);
+			free (driver->reservation_name);
+			driver->reservation_name = NULL;
+			alsa_driver_delete (driver);
+			return NULL;
+		}
 	}
 
 	alsa_driver_hw_specific (driver, hw_monitoring, hw_metering);

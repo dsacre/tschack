@@ -85,6 +85,7 @@ typedef struct _alsa_driver {
     char                         *alsa_name_playback;
     char                         *alsa_name_capture;
     char                         *alsa_driver;
+    char			 *reservation_name;
     bitset_t			  channels_not_done;
     bitset_t			  channels_done;
     snd_pcm_format_t              playback_sample_format;
