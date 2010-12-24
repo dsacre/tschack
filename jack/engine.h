@@ -77,6 +77,8 @@ struct _jack_engine {
     void (*transport_cycle_start) (struct _jack_engine *, jack_time_t time);
     void (*driver_exit)     (struct _jack_engine *);
     jack_time_t (*get_microseconds)(void);
+    int (* on_device_acquire)(const char *);
+    void (* on_device_release)(const char *);
     /* "private" sections starts here */
 
     /* engine serialization -- use precedence for deadlock avoidance */

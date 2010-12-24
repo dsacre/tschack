@@ -125,6 +125,9 @@ struct jackctl_server
     /* string, cgroup... */
     union jackctl_parameter_value cgroup;
     union jackctl_parameter_value default_cgroup;
+
+    bool (* on_device_acquire)(const char *);
+    void (* on_device_release)(const char *);
 };
 
 struct jackctl_driver
@@ -1124,9 +1127,9 @@ jackctl_server_t * jackctl_server_create(
     {
         goto fail_free_parameters;
     }
-    //TODO: need 
-    //JackServerGlobals::on_device_acquire = on_device_acquire;
-    //JackServerGlobals::on_device_release = on_device_release;
+
+    server_ptr->on_device_acquire = on_device_acquire;
+    server_ptr->on_device_release = on_device_release;
 
     if (!jackctl_drivers_load(server_ptr))
     {
@@ -1135,6 +1138,7 @@ jackctl_server_t * jackctl_server_create(
     
     /* Allowed to fail */
     jackctl_internals_load(server_ptr);
+
 
     return server_ptr;
 
@@ -1234,6 +1238,9 @@ jackctl_server_start(
 	    jack_error ("cannot create engine");
 	    goto fail_unregister;
     }
+
+    server_ptr->engine->on_device_release = server_ptr->on_device_release;
+    server_ptr->engine->on_device_acquire = server_ptr->on_device_acquire;
 
     if (jack_engine_load_driver (server_ptr->engine, driver_ptr->desc_ptr, driver_ptr->set_parameters))
     {
