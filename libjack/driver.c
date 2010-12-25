@@ -95,7 +95,6 @@ jack_driver_nt_detach (jack_driver_nt_t * driver, jack_engine_t * engine)
 	int ret;
 
 	ret = driver->nt_detach (driver);
-	driver->engine = NULL;
 
 	return ret;
 }
