@@ -102,7 +102,16 @@ driver_parse_args( drv, argv )
 #for p in drv.params.values():
 #    print p.name, "-> ", p.value
 
-srv.start( drv )
+started = srv.start( drv )
+
+if not started:
+    print "failed to start with driver " + drv.name
+    print "trying to start with dummy driver, switch to the right master yourself"
+
+    started = srv.start( srv.drivers["dummy"] )
+
+    if not started:
+	sys.exit(20)
 
 quit = False
 while not quit:
