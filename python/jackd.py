@@ -5,6 +5,7 @@ from mygetopt import my_getopt
 import jackctl
 import readline
 
+import reserve_audio
 
 argv = sys.argv[1:]
 
@@ -75,8 +76,17 @@ def driver_parse_args( drv, argv ):
 		else:
 		    p.value = optarg
 
+def acquire_dev(cardname):
+    reserve_audio.reserve_dev(cardname,20,None)
+    return True
+
+def release_dev(cardname):
+    reserve_audio.rr.unreserve()
+    reserve_audio.rr = None
 
 srv = jackctl.Server()
+srv.acquire_card_cb = acquire_dev
+srv.release_card_cb = release_dev
 
 drv, argv = server_parse_ags( srv, argv )
 driver_parse_args( drv, argv )
