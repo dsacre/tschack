@@ -1555,6 +1555,11 @@ bool jackctl_server_switch_master(jackctl_server_t * server_ptr, jackctl_driver_
 	    server_ptr->engine->driver = NULL;
 
 	    jack_driver_unload (old_driver);
+
+	    server_ptr->engine->audio_out_cnt = 0;
+	    server_ptr->engine->audio_in_cnt = 0;
+	    server_ptr->engine->midi_out_cnt = 0;
+	    server_ptr->engine->midi_in_cnt = 0;
     }
 
     if (jack_engine_load_driver (server_ptr->engine, driver_ptr->desc_ptr, driver_ptr->set_parameters))
