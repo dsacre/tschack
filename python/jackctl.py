@@ -200,6 +200,9 @@ class Server(object):
 	self.reled = DeviceReleaseFunc(self.release_card)
 	self.srv_ptr = jackctl_server_create( self.dacqd, self.reled )
 
+	self.acquire_card_cb = None
+	self.release_card_cb = None
+
 	driver_jslist = jackctl_server_get_drivers_list( self.srv_ptr )
 
 	self.drivers = {}
@@ -226,11 +229,14 @@ class Server(object):
 
 
     def acquire_card( self, cardname ):
-	print "acquire card " + cardname
-	return True
+	if self.acquire_card_cb:
+	    return self.acquire_card_cb(cardname)
+	else:
+	    return True
 
     def release_card( self, cardname ):
-	print "release card " + cardname
+	if self.release_card_cb:
+	    self.release_card_cb(cardname)
 
 
 
