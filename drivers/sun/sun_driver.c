@@ -1405,7 +1405,7 @@ driver_get_descriptor ()
 
 
 jack_driver_t *
-driver_initialize (jack_client_t *client, JSList * params)
+driver_initialize (jack_engine_t *engine, jack_client_t *client, JSList * params)
 {
 	int bits = SUN_DRIVER_DEF_BITS;
 	jack_nframes_t sample_rate = SUN_DRIVER_DEF_FS;

@@ -469,7 +469,7 @@ driver_get_descriptor ()
 const char driver_client_name[] = "dummy_pcm";
 
 jack_driver_t *
-driver_initialize (jack_client_t *client, const JSList * params)
+driver_initialize (jack_engine_t *engine, jack_client_t *client, const JSList * params)
 {
 	jack_nframes_t sample_rate = 48000;
 	jack_nframes_t period_size = 1024;

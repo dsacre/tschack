@@ -1114,7 +1114,7 @@ jack_driver_desc_t *driver_get_descriptor()
     return desc;
 }
 
-jack_driver_t *driver_initialize(jack_client_t * client,
+jack_driver_t *driver_initialize(jack_engine_t *engine, jack_client_t * client,
 				 const JSList * params)
 {
     jack_nframes_t srate = 44100; /* Some older Mac models only support this value */

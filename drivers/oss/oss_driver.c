@@ -1147,7 +1147,7 @@ jack_driver_desc_t * driver_get_descriptor ()
 }
 
 
-jack_driver_t * driver_initialize (jack_client_t *client, 
+jack_driver_t * driver_initialize (jack_engine_t *engine, jack_client_t *client, 
 	JSList * params)
 {
 	int bits = OSS_DRIVER_DEF_BITS;

@@ -78,7 +78,7 @@ typedef struct {
 } jack_connection_internal_t;
 
 typedef struct _jack_driver_info {
-    jack_driver_t *(*initialize)(jack_client_t*, const JSList *);
+    jack_driver_t *(*initialize)(jack_engine_t *,jack_client_t*, const JSList *);
     void           (*finish);
     char           (*client_name);
     dlhandle       handle;
@@ -1136,7 +1136,7 @@ jack_engine_load_driver (jack_engine_t *engine,
 		return -1;
 	}
 
-	if ((driver = info->initialize (client->private_client,
+	if ((driver = info->initialize (engine, client->private_client,
 					driver_params)) == NULL) {
 		free (info);
 		return -1;

@@ -1213,7 +1213,7 @@ driver_get_descriptor ()
 
 
 jack_driver_t *
-driver_initialize (jack_client_t *client, JSList * params)
+driver_initialize (jack_engine_t *engine, jack_client_t *client, JSList * params)
 {
 	jack_driver_t *driver;
 

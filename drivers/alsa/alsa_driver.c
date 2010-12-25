@@ -1996,7 +1996,8 @@ alsa_driver_delete (alsa_driver_t *driver)
 }
 
 static jack_driver_t *
-alsa_driver_new (char *name, char *playback_alsa_device,
+alsa_driver_new (jack_engine_t *engine,
+		 char *name, char *playback_alsa_device,
 		 char *capture_alsa_device,
 		 jack_client_t *client, 
 		 jack_nframes_t frames_per_cycle,
@@ -2106,9 +2107,9 @@ alsa_driver_new (char *name, char *playback_alsa_device,
 		return NULL;
 	}
 
-	if (driver->reservation_name && driver->engine->on_device_acquire) {
-		if (driver->engine->on_device_acquire (driver->reservation_name)) {
-			VERBOSE(driver->engine, "acquired device %s", driver->reservation_name);
+	if (driver->reservation_name && engine->on_device_acquire) {
+		if (engine->on_device_acquire (driver->reservation_name)) {
+			VERBOSE(engine, "acquired device %s", driver->reservation_name);
 		} else {
 			jack_error ("failed to acquire device %s", driver->reservation_name);
 			free (driver->reservation_name);
@@ -2117,6 +2118,8 @@ alsa_driver_new (char *name, char *playback_alsa_device,
 			return NULL;
 		}
 	}
+
+	driver->engine = engine;
 
 	alsa_driver_hw_specific (driver, hw_monitoring, hw_metering);
 
@@ -2556,7 +2559,7 @@ driver_get_descriptor ()
 }
 
 jack_driver_t *
-driver_initialize (jack_client_t *client, const JSList * params)
+driver_initialize (jack_engine_t *engine, jack_client_t *client, const JSList * params)
 {
         jack_nframes_t srate = 48000;
 	jack_nframes_t frames_per_interrupt = 1024;
@@ -2684,7 +2687,8 @@ driver_initialize (jack_client_t *client, const JSList * params)
 		midi = alsa_rawmidi_new(client);
 	}
 
-	return alsa_driver_new ("alsa_pcm", playback_pcm_name,
+	return alsa_driver_new (engine,
+			        "alsa_pcm", playback_pcm_name,
 				capture_pcm_name, client,
 				frames_per_interrupt, 
 				user_nperiods, srate, hw_monitoring,
