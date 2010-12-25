@@ -4,6 +4,7 @@ import sys
 from mygetopt import my_getopt
 import jackctl
 import readline
+import time
 
 import reserve_audio
 
@@ -78,6 +79,7 @@ def driver_parse_args( drv, argv ):
 
 def acquire_dev(cardname):
     reserve_audio.reserve_dev(cardname,20,None)
+    time.sleep(0.1)
     return True
 
 def release_dev(cardname):
