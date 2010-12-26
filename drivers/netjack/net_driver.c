@@ -63,7 +63,7 @@ net_driver_wait (net_driver_t *driver, int extra_fd, int *status, float *delayed
     delay = netjack_wait( netj, driver->engine->get_microseconds );
     if( delay ) {
 	    //driver->engine->delay( driver->engine, (float)delay );
-	    jack_error( "netxruns amount: %dms", delay/1000 );
+	    driver->engine->jack_error( "netxruns amount: %dms", delay/1000 );
     }
 
     
@@ -170,7 +170,7 @@ net_driver_read (net_driver_t* driver, jack_nframes_t nframes)
                     jack_transport_start(netj->client);
                     last_transport_state = JackTransportStopped;
                     sync_state = FALSE;
-                    jack_info("locally stopped... starting...");
+                    driver->engine->jack_info("locally stopped... starting...");
                 }
 
                 if (local_trans_pos.frame != compensated_tranport_pos)
@@ -178,14 +178,14 @@ net_driver_read (net_driver_t* driver, jack_nframes_t nframes)
                     jack_transport_locate(netj->client, compensated_tranport_pos);
                     last_transport_state = JackTransportRolling;
                     sync_state = FALSE;
-                    jack_info("starting locate to %d", compensated_tranport_pos );
+                    driver->engine->jack_info("starting locate to %d", compensated_tranport_pos );
                 }
                 break;
             case JackTransportStopped:
                 sync_state = TRUE;
                 if (local_trans_pos.frame != (pkthdr->transport_frame)) {
                     jack_transport_locate(netj->client, (pkthdr->transport_frame));
-                    jack_info("transport is stopped locate to %d", pkthdr->transport_frame);
+                    driver->engine->jack_info("transport is stopped locate to %d", pkthdr->transport_frame);
                 }
                 if (local_trans_state != JackTransportStopped)
                     jack_transport_stop(netj->client);
@@ -194,7 +194,7 @@ net_driver_read (net_driver_t* driver, jack_nframes_t nframes)
                 sync_state = TRUE;
 //		    		if(local_trans_pos.frame != (pkthdr->transport_frame + (pkthdr->latency) * nframes)) {
 //				    jack_transport_locate(netj->client, (pkthdr->transport_frame + (pkthdr->latency + 2) * nframes));
-//				    jack_info("running locate to %d", pkthdr->transport_frame + (pkthdr->latency)*nframes);
+//				    driver->engine->jack_info("running locate to %d", pkthdr->transport_frame + (pkthdr->latency)*nframes);
 //		    		}
                 if (local_trans_state != JackTransportRolling)
                     jack_transport_start (netj->client);
@@ -269,7 +269,7 @@ net_driver_attach (net_driver_t *driver)
 {
     netjack_driver_state_t *netj = &( driver->netj );
     if (driver->engine->set_buffer_size (driver->engine, netj->period_size)) {
-	    jack_error ("netjack: cannot set engine buffer size to %d (check MIDI)", netj->period_size);
+	    driver->engine->jack_error ("netjack: cannot set engine buffer size to %d (check MIDI)", netj->period_size);
 	    return -1;
     }
     driver->engine->set_sample_rate (driver->engine, netj->sample_rate);
@@ -300,7 +300,8 @@ net_driver_delete (net_driver_t *driver)
 }
 
 static jack_driver_t *
-net_driver_new (jack_client_t * client,
+net_driver_new (jack_engine_t * engine,
+		jack_client_t * client,
                 char *name,
                 unsigned int capture_ports,
                 unsigned int playback_ports,
@@ -322,7 +323,7 @@ net_driver_new (jack_client_t * client,
 {
     net_driver_t * driver;
 
-    jack_info ("creating net driver ... %s|%" PRIu32 "|%" PRIu32
+    engine->jack_info ("creating net driver ... %s|%" PRIu32 "|%" PRIu32
             "|%u|%u|%u|transport_sync:%u", name, sample_rate, period_size, listen_port,
             capture_ports, playback_ports, transport_sync);
 
@@ -366,11 +367,11 @@ net_driver_new (jack_client_t * client,
 
     netjack_startup( netj );
 
-    jack_info ("netjack: period   : up: %d / dn: %d", netj->net_period_up, netj->net_period_down);
-    jack_info ("netjack: framerate: %d", netj->sample_rate);
-    jack_info ("netjack: audio    : cap: %d / pbk: %d)", netj->capture_channels_audio, netj->playback_channels_audio);
-    jack_info ("netjack: midi     : cap: %d / pbk: %d)", netj->capture_channels_midi, netj->playback_channels_midi);
-    jack_info ("netjack: buffsize : rx: %d)", netj->rx_bufsize);
+    driver->engine->jack_info ("netjack: period   : up: %d / dn: %d", netj->net_period_up, netj->net_period_down);
+    driver->engine->jack_info ("netjack: framerate: %d", netj->sample_rate);
+    driver->engine->jack_info ("netjack: audio    : cap: %d / pbk: %d)", netj->capture_channels_audio, netj->playback_channels_audio);
+    driver->engine->jack_info ("netjack: midi     : cap: %d / pbk: %d)", netj->capture_channels_midi, netj->playback_channels_midi);
+    driver->engine->jack_info ("netjack: buffsize : rx: %d)", netj->rx_bufsize);
     driver->period_usecs = netj->period_usecs;
 
     return (jack_driver_t *) driver;
@@ -553,7 +554,7 @@ driver_get_descriptor ()
 const char driver_client_name[] = "net_pcm";
 
 jack_driver_t *
-driver_initialize (jack_client_t *client, const JSList * params)
+driver_initialize (jack_engine_t *engine, jack_client_t *client, const JSList * params)
 {
     jack_nframes_t sample_rate = 48000;
     jack_nframes_t resample_factor = 1;
@@ -668,7 +669,7 @@ driver_initialize (jack_client_t *client, const JSList * params)
         }
     }
 
-    return net_driver_new (client, "net_pcm", capture_ports, playback_ports,
+    return net_driver_new (engine, client, "net_pcm", capture_ports, playback_ports,
                            capture_ports_midi, playback_ports_midi,
                            sample_rate, period_size,
                            listen_port, handle_transport_sync,

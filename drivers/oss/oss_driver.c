@@ -323,7 +323,7 @@ static void copy_and_convert_out (void *dst, jack_sample_t *src,
 }
 
 
-static void set_fragment (int fd, size_t fragsize, unsigned int fragcount)
+static void set_fragment (oss_driver_t *driver, int fd, size_t fragsize, unsigned int fragcount)
 {
 	int fragsize_2p;
 	int fragments;
@@ -332,19 +332,19 @@ static void set_fragment (int fd, size_t fragsize, unsigned int fragcount)
 	fragments = ((fragcount << 16) | (fragsize_2p & 0xffff));
 	if (ioctl(fd, SNDCTL_DSP_SETFRAGMENT, &fragments) < 0)
 	{
-		jack_error("OSS: failed to set fragment size: %s@%i, errno=%d",
+		driver->engine->jack_error("OSS: failed to set fragment size: %s@%i, errno=%d",
 			__FILE__, __LINE__, errno);
 	}
 }
 
 
-static int get_fragment (int fd)
+static int get_fragment (oss_driver_t *driver, int fd)
 {
 	int fragsize;
 
 	if (ioctl(fd, SNDCTL_DSP_GETBLKSIZE, &fragsize) < 0)
 	{
-		jack_error("OSS: failed to get fragment size: %s@%i, errno=%d",
+		driver->engine->jack_error("OSS: failed to get fragment size: %s@%i, errno=%d",
 			__FILE__, __LINE__, errno);
 		return 0;
 	}
@@ -368,7 +368,7 @@ static int oss_driver_attach (oss_driver_t *driver, jack_engine_t *engine)
 	driver->engine = engine;
 
 	if (engine->set_buffer_size(engine, driver->period_size)) {
-		jack_error ("OSS: cannot set engine buffer size to %d (check MIDI)", driver->period_size);
+		driver->engine->jack_error ("OSS: cannot set engine buffer size to %d (check MIDI)", driver->period_size);
 		return -1;
 	}
 	engine->set_sample_rate(engine, driver->sample_rate);
@@ -382,7 +382,7 @@ static int oss_driver_attach (oss_driver_t *driver, jack_engine_t *engine)
 			JACK_DEFAULT_AUDIO_TYPE, port_flags, 0);
 		if (port == NULL)
 		{
-			jack_error("OSS: cannot register port for %s: %s@%i",
+			driver->engine->jack_error("OSS: cannot register port for %s: %s@%i",
 				channel_name, __FILE__, __LINE__);
 			break;
 		}
@@ -401,7 +401,7 @@ static int oss_driver_attach (oss_driver_t *driver, jack_engine_t *engine)
 			JACK_DEFAULT_AUDIO_TYPE, port_flags, 0);
 		if (port == NULL)
 		{
-			jack_error("OSS: cannot register port for %s: %s@%i",
+			driver->engine->jack_error("OSS: cannot register port for %s: %s@%i",
 				channel_name, __FILE__, __LINE__);
 			break;
 		}
@@ -488,7 +488,7 @@ static int oss_driver_start (oss_driver_t *driver)
 			infd = open(indev, O_RDONLY|O_EXCL);
 			if (infd < 0)
 			{
-				jack_error(
+				driver->engine->jack_error(
 					"OSS: failed to open input device %s: %s@%i, errno=%d",
 					indev, __FILE__, __LINE__, errno);
 			}
@@ -497,7 +497,7 @@ static int oss_driver_start (oss_driver_t *driver)
 #endif
 			fragsize = driver->period_size * 
 				driver->capture_channels * samplesize;
-			set_fragment(infd, fragsize, driver->nperiods);
+			set_fragment(driver, infd, fragsize, driver->nperiods);
 		}
 		else infd = -1;
 
@@ -506,7 +506,7 @@ static int oss_driver_start (oss_driver_t *driver)
 			outfd = open(outdev, O_WRONLY|O_EXCL);
 			if (outfd < 0)
 			{
-				jack_error(
+				driver->engine->jack_error(
 					"OSS: failed to open output device %s: %s@%i, errno=%d",
 					outdev, __FILE__, __LINE__, errno);
 			}
@@ -515,7 +515,7 @@ static int oss_driver_start (oss_driver_t *driver)
 #endif
 			fragsize = driver->period_size * 
 				driver->playback_channels * samplesize;
-			set_fragment(outfd, fragsize, driver->nperiods);
+			set_fragment(driver, driver->outfd, fragsize, driver->nperiods);
 		}
 		else outfd = -1;
 	}
@@ -528,7 +528,7 @@ static int oss_driver_start (oss_driver_t *driver)
 			outfd = -1;
 			if (infd < 0)
 			{
-				jack_error(
+				driver->engine->jack_error(
 					"OSS: failed to open device %s: %s@%i, errno=%d",
 					indev, __FILE__, __LINE__, errno);
 				return -1;
@@ -544,7 +544,7 @@ static int oss_driver_start (oss_driver_t *driver)
 			outfd = open(outdev, O_RDWR|O_EXCL);
 			if (outfd < 0)
 			{
-				jack_error(
+				driver->engine->jack_error(
 					"OSS: failed to open device %s: %s@%i, errno=%d",
 					outdev, __FILE__, __LINE__, errno);
 				return -1;
@@ -558,7 +558,7 @@ static int oss_driver_start (oss_driver_t *driver)
 			infd = outfd = open(indev, O_RDWR|O_EXCL);
 			if (infd < 0)
 			{
-				jack_error(
+				driver->engine->jack_error(
 					"OSS: failed to open device %s: %s@%i, errno=%d",
 					indev, __FILE__, __LINE__, errno);
 				return -1;
@@ -574,7 +574,7 @@ static int oss_driver_start (oss_driver_t *driver)
 			if (ioctl(infd, SNDCTL_DSP_SETDUPLEX, 0) < 0)
 			{
 				if (errno != EINVAL) /* Dont care */
-					jack_error(
+					driver->engine->jack_error(
 						"OSS: failed to enable full duplex for %s: %s@%i, errno=%d",
 						indev, __FILE__, __LINE__,
 						errno);
@@ -584,13 +584,13 @@ static int oss_driver_start (oss_driver_t *driver)
 		{
 			fragsize = driver->period_size * 
 				driver->capture_channels * samplesize;
-			set_fragment(infd, fragsize, driver->nperiods);
+			set_fragment(driver, infd, fragsize, driver->nperiods);
 		}
 		if (outfd >= 0 && infd < 0)
 		{
 			fragsize = driver->period_size * 
 				driver->playback_channels * samplesize;
-			set_fragment(outfd, fragsize, driver->nperiods);
+			set_fragment(driver, outfd, fragsize, driver->nperiods);
 		}
 	}
 	driver->infd = infd;
@@ -600,27 +600,27 @@ static int oss_driver_start (oss_driver_t *driver)
 	{
 		format = driver->format;
 		if (ioctl(infd, SNDCTL_DSP_SETFMT, &format) < 0)
-			jack_error(
+			driver->engine->jack_error(
 				"OSS: failed to set format for %s: %s@%i, errno=%d", 
 				indev, __FILE__, __LINE__, errno);
 		channels = driver->capture_channels;
 		if (ioctl(infd, SNDCTL_DSP_CHANNELS, &channels) < 0)
-			jack_error(
+			driver->engine->jack_error(
 				"OSS: failed to set channels for %s: %s@%i, errno=%d", 
 				indev, __FILE__, __LINE__, errno);
 		samplerate = driver->sample_rate;
 		if (ioctl(infd, SNDCTL_DSP_SPEED, &samplerate) < 0)
-			jack_error(
+			driver->engine->jack_error(
 				"OSS: failed to set samplerate for %s: %s@%i, errno=%d", 
 				indev, __FILE__, __LINE__, errno);
-		jack_info("oss_driver: %s : 0x%x/%i/%i (%i)", indev, 
-			format, channels, samplerate, get_fragment(infd));
+		driver->engine->jack_info("oss_driver: %s : 0x%x/%i/%i (%i)", indev, 
+			format, channels, samplerate, get_fragment(driver, infd));
 		
-		period_size = get_fragment(infd) / samplesize / channels;
+		period_size = get_fragment(driver, infd) / samplesize / channels;
 		if (period_size != driver->period_size && 
 			!driver->ignorehwbuf)
 		{
-			jack_info("oss_driver: period size update: %u",
+			driver->engine->jack_info("oss_driver: period size update: %u",
 				period_size);
 			driver->period_size = period_size;
 			driver->period_usecs = 
@@ -628,7 +628,7 @@ static int oss_driver_start (oss_driver_t *driver)
 				 (double) driver->sample_rate) * 1e6;
 			if (driver->engine->set_buffer_size(driver->engine, 
 							    driver->period_size)) {
-				jack_error ("OSS: cannot set engine buffer size to %d (check MIDI)", driver->period_size);
+				driver->engine->jack_error ("OSS: cannot set engine buffer size to %d (check MIDI)", driver->period_size);
 				return -1;
 			}
 		}
@@ -638,28 +638,28 @@ static int oss_driver_start (oss_driver_t *driver)
 	{
 		format = driver->format;
 		if (ioctl(outfd, SNDCTL_DSP_SETFMT, &format) < 0)
-			jack_error(
+			driver->engine->jack_error(
 				"OSS: failed to set format for %s: %s@%i, errno=%d", 
 				outdev, __FILE__, __LINE__, errno);
 		channels = driver->playback_channels;
 		if (ioctl(outfd, SNDCTL_DSP_CHANNELS, &channels) < 0)
-			jack_error(
+			driver->engine->jack_error(
 				"OSS: failed to set channels for %s: %s@%i, errno=%d", 
 				outdev, __FILE__, __LINE__, errno);
 		samplerate = driver->sample_rate;
 		if (ioctl(outfd, SNDCTL_DSP_SPEED, &samplerate) < 0)
-			jack_error(
+			driver->engine->jack_error(
 				"OSS: failed to set samplerate for %s: %s@%i, errno=%d", 
 				outdev, __FILE__, __LINE__, errno);
-		jack_info("oss_driver: %s : 0x%x/%i/%i (%i)", outdev, 
+		driver->engine->jack_info("oss_driver: %s : 0x%x/%i/%i (%i)", outdev, 
 			format, channels, samplerate, 
-			get_fragment(outfd));
+			get_fragment(driver, outfd));
 
-		period_size = get_fragment(outfd) / samplesize / channels;
+		period_size = get_fragment(driver, outfd) / samplesize / channels;
 		if (period_size != driver->period_size &&
 			!driver->ignorehwbuf)
 		{
-			jack_info("oss_driver: period size update: %u",
+			driver->engine->jack_info("oss_driver: period size update: %u",
 				period_size);
 			driver->period_size = period_size;
 			driver->period_usecs = 
@@ -667,7 +667,7 @@ static int oss_driver_start (oss_driver_t *driver)
 				 (double) driver->sample_rate) * 1e6;
 			if (driver->engine->set_buffer_size(driver->engine, 
 							    driver->period_size)) {
-				jack_error ("OSS: cannot set engine buffer size to %d (check MIDI)", driver->period_size);
+				driver->engine->jack_error ("OSS: cannot set engine buffer size to %d (check MIDI)", driver->period_size);
 				return -1;
 			}
 		}
@@ -680,7 +680,7 @@ static int oss_driver_start (oss_driver_t *driver)
 		driver->indevbuf = malloc(driver->indevbufsize);
 		if (driver->indevbuf == NULL)
 		{
-			jack_error( "OSS: malloc() failed: %s@%i", 
+			driver->engine->jack_error( "OSS: malloc() failed: %s@%i", 
 				__FILE__, __LINE__);
 			return -1;
 		}
@@ -699,7 +699,7 @@ static int oss_driver_start (oss_driver_t *driver)
 		driver->outdevbuf = malloc(driver->outdevbufsize);
 		if (driver->outdevbuf == NULL)
 		{
-			jack_error("OSS: malloc() failed: %s@%i", 
+			driver->engine->jack_error("OSS: malloc() failed: %s@%i", 
 				__FILE__, __LINE__);
 			return -1;
 		}
@@ -711,7 +711,7 @@ static int oss_driver_start (oss_driver_t *driver)
 		driver->outdevbuf = NULL;
 	}
 
-	jack_info("oss_driver: indevbuf %zd B, outdevbuf %zd B",
+	driver->engine->jack_info("oss_driver: indevbuf %zd B, outdevbuf %zd B",
 		driver->indevbufsize, driver->outdevbufsize);
 
 	pthread_mutex_init(&driver->mutex_in, NULL);
@@ -732,7 +732,7 @@ static int oss_driver_start (oss_driver_t *driver)
 			driver->engine->control->real_time, 
 			io_thread, driver) < 0)
 		{
-			jack_error("OSS: jack_client_create_thread() failed: %s@%i",
+			driver->engine->jack_error("OSS: jack_client_create_thread() failed: %s@%i",
 				__FILE__, __LINE__);
 			return -1;
 		}
@@ -746,7 +746,7 @@ static int oss_driver_start (oss_driver_t *driver)
 			driver->engine->control->real_time, 
 			io_thread, driver) < 0)
 		{
-			jack_error("OSS: jack_client_create_thread() failed: %s@%i",
+			driver->engine->jack_error("OSS: jack_client_create_thread() failed: %s@%i",
 				__FILE__, __LINE__);
 			return -1;
 		}
@@ -774,7 +774,7 @@ static int oss_driver_stop (oss_driver_t *driver)
 	{
 		if (pthread_join(driver->thread_in, &retval) < 0)
 		{
-			jack_error("OSS: pthread_join() failed: %s@%i",
+			driver->engine->jack_error("OSS: pthread_join() failed: %s@%i",
 				__FILE__, __LINE__);
 			return -1;
 		}
@@ -783,7 +783,7 @@ static int oss_driver_stop (oss_driver_t *driver)
 	{
 		if (pthread_join(driver->thread_out, &retval) < 0)
 		{
-			jack_error("OSS: pthread_join() failed: %s@%i",
+			driver->engine->jack_error("OSS: pthread_join() failed: %s@%i",
 				__FILE__, __LINE__);
 			return -1;
 		}
@@ -831,7 +831,7 @@ static int oss_driver_read (oss_driver_t *driver, jack_nframes_t nframes)
 	if (!driver->run) return 0;
 	if (nframes != driver->period_size)
 	{
-		jack_error(
+		driver->engine->jack_error(
 			"OSS: read failed nframes != period_size  (%u/%u): %s@%i",
 			nframes, driver->period_size, __FILE__, __LINE__);
 		return -1;
@@ -874,7 +874,7 @@ static int oss_driver_write (oss_driver_t *driver, jack_nframes_t nframes)
 	if (!driver->run) return 0;
 	if (nframes != driver->period_size)
 	{
-		jack_error(
+		driver->engine->jack_error(
 			"OSS: write failed nframes != period_size  (%u/%u): %s@%i",
 			nframes, driver->period_size, __FILE__, __LINE__);
 		return -1;
@@ -927,10 +927,10 @@ static int oss_driver_bufsize (oss_driver_t *driver, jack_nframes_t nframes)
 
 	set_period_size(driver, nframes);
 	if (driver->engine->set_buffer_size(driver->engine, driver->period_size)) {
-		jack_error ("OSS: cannot set engine buffer size to %d (check MIDI)", driver->period_size);
+		driver->engine->jack_error ("OSS: cannot set engine buffer size to %d (check MIDI)", driver->period_size);
 		return -1;
 	}
-	jack_info("oss_driver: period size update: %u", nframes);
+	driver->engine->jack_info("oss_driver: period size update: %u", nframes);
 
 	oss_driver_start(driver);
 
@@ -976,7 +976,7 @@ static void *io_thread (void *param)
 		localbuf = malloc(localsize);
 		if (localbuf == NULL)
 		{
-			jack_error("OSS: malloc() failed: %s@%i",
+			driver->engine->jack_error("OSS: malloc() failed: %s@%i",
 				__FILE__, __LINE__);
 			return NULL;
 		}
@@ -986,7 +986,7 @@ static void *io_thread (void *param)
 			io_res = read(driver->infd, localbuf, localsize);
 			if (io_res < (ssize_t) localsize)
 			{
-				jack_error(
+				driver->engine->jack_error(
 					"OSS: read() failed: %s@%i, count=%d/%d, errno=%d",
 					__FILE__, __LINE__, io_res, localsize,
 					errno);
@@ -1008,7 +1008,7 @@ static void *io_thread (void *param)
 		localbuf = malloc(localsize);
 		if (localbuf == NULL)
 		{
-			jack_error("OSS: malloc() failed: %s@%i",
+			driver->engine->jack_error("OSS: malloc() failed: %s@%i",
 				__FILE__, __LINE__);
 			return NULL;
 		}
@@ -1029,7 +1029,7 @@ static void *io_thread (void *param)
 			io_res = write(driver->outfd, localbuf, localsize);
 			if (io_res < (ssize_t) localsize)
 			{
-				jack_error(
+				driver->engine->jack_error(
 					"OSS: write() failed: %s@%i, count=%d/%d, errno=%d",
 					__FILE__, __LINE__, io_res, localsize,
 					errno);
@@ -1047,7 +1047,7 @@ static void *io_thread (void *param)
 	localbuf = malloc(localsize);
 	if (localbuf == NULL)
 	{
-		jack_error("OSS: malloc() failed: %s@%i", __FILE__, __LINE__);
+		driver->engine->jack_error("OSS: malloc() failed: %s@%i", __FILE__, __LINE__);
 		return NULL;
 	}
 	if (driver->trigger)
@@ -1071,7 +1071,7 @@ static void *io_thread (void *param)
 				driver->outdevbufsize);
 			if (io_res < (ssize_t) driver->outdevbufsize)
 			{
-				jack_error(
+				driver->engine->jack_error(
 					"OSS: write() failed: %s@%i, count=%d/%d, errno=%d",
 					__FILE__, __LINE__, io_res,
 					driver->outdevbufsize, errno);
@@ -1085,7 +1085,7 @@ static void *io_thread (void *param)
 				driver->indevbufsize);
 			if (io_res < (ssize_t) driver->indevbufsize)
 			{
-				jack_error(
+				driver->engine->jack_error(
 					"OSS: read() failed: %s@%i, count=%d/%d, errno=%d",
 					__FILE__, __LINE__, io_res,
 					driver->indevbufsize, errno);
@@ -1165,7 +1165,7 @@ jack_driver_t * driver_initialize (jack_engine_t *engine, jack_client_t *client,
 	driver = (oss_driver_t *) malloc(sizeof(oss_driver_t));
 	if (driver == NULL)
 	{
-		jack_error("OSS: malloc() failed: %s@%i, errno=%d",
+		driver->engine->jack_error("OSS: malloc() failed: %s@%i, errno=%d",
 			__FILE__, __LINE__, errno);
 		return NULL;
 	}

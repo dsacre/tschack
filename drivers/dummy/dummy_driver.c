@@ -50,7 +50,7 @@ FakeVideoSync( dummy_driver_t *driver )
         jack_position_t *position = &driver->engine->control->current_time;
 
         if ( period >= VIDEO_SYNC_PERIOD ) {
-                jack_error("JACK driver period size too large for simple video sync emulation. Halting.");
+                driver->engine->jack_error("JACK driver period size too large for simple video sync emulation. Halting.");
                 exit(0);
         }
 
@@ -124,7 +124,7 @@ dummy_driver_wait (dummy_driver_t *driver, int extra_fd, int *status,
 			    > (PRETEND_BUFFER_SIZE * 1000000LL
 			       / driver->sample_rate)) {
 			/* xrun */
-			jack_error("**** dummy: xrun of %ju usec",
+			driver->engine->jack_error("**** dummy: xrun of %ju usec",
 				(uintmax_t)(ts_to_nsec(now) - ts_to_nsec(driver->next_wakeup))/1000LL);
 			nframes = 0;
 			driver->next_wakeup.tv_sec = 0;
@@ -135,7 +135,7 @@ dummy_driver_wait (dummy_driver_t *driver, int extra_fd, int *status,
 		driver->next_wakeup = add_ts(driver->next_wakeup, driver->wait_time);
 	} else {
 		if(clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &driver->next_wakeup, NULL)) {
-			jack_error("error while sleeping");
+			driver->engine->jack_error("error while sleeping");
 			*status = -1;
 		} else {
 			clock_gettime(CLOCK_REALTIME, &now);
@@ -175,7 +175,7 @@ dummy_driver_wait (dummy_driver_t *driver, int extra_fd, int *status,
 			    > (PRETEND_BUFFER_SIZE * 1000000LL
 			       / driver->sample_rate)) {
 			/* xrun */
-			jack_error("**** dummy: xrun of %ju usec",
+			driver->engine->jack_error("**** dummy: xrun of %ju usec",
 				(uintmax_t)now - driver->next_time);
 			driver->next_time = now + driver->wait_time;
 		} else {
@@ -251,7 +251,7 @@ dummy_driver_bufsize (dummy_driver_t* driver, jack_nframes_t nframes)
 
 	/* tell the engine to change its buffer size */
 	if (driver->engine->set_buffer_size (driver->engine, nframes)) {
-		jack_error ("dummy: cannot set engine buffer size to %d (check MIDI)", nframes);
+		driver->engine->jack_error ("dummy: cannot set engine buffer size to %d (check MIDI)", nframes);
 		return -1;
 	}
 
@@ -274,7 +274,7 @@ dummy_driver_attach (dummy_driver_t *driver)
 	int port_flags;
 
 	if (driver->engine->set_buffer_size (driver->engine, driver->period_size)) {
-		jack_error ("dummy: cannot set engine buffer size to %d (check MIDI)", driver->period_size);
+		driver->engine->jack_error ("dummy: cannot set engine buffer size to %d (check MIDI)", driver->period_size);
 		return -1;
 	}
 	driver->engine->set_sample_rate (driver->engine, driver->sample_rate);
@@ -290,7 +290,7 @@ dummy_driver_attach (dummy_driver_t *driver)
 					   port_flags, 0);
 		if (!port)
 		{
-			jack_error ("DUMMY: cannot register port for %s", buf);
+			driver->engine->jack_error ("DUMMY: cannot register port for %s", buf);
 			break;
 		}
 
@@ -310,7 +310,7 @@ dummy_driver_attach (dummy_driver_t *driver)
 
 		if (!port)
 		{
-			jack_error ("DUMMY: cannot register port for %s", buf);
+			driver->engine->jack_error ("DUMMY: cannot register port for %s", buf);
 			break;
 		}
 
@@ -358,7 +358,8 @@ dummy_driver_delete (dummy_driver_t *driver)
 }
 
 static jack_driver_t *
-dummy_driver_new (jack_client_t * client,
+dummy_driver_new (jack_engine_t * engine,
+		  jack_client_t * client,
 		  char *name,
 		  unsigned int capture_ports,
 		  unsigned int playback_ports,
@@ -368,7 +369,7 @@ dummy_driver_new (jack_client_t * client,
 {
 	dummy_driver_t * driver;
 
-	jack_info ("creating dummy driver ... %s|%" PRIu32 "|%" PRIu32
+	engine->jack_info ("creating dummy driver ... %s|%" PRIu32 "|%" PRIu32
 		"|%lu|%u|%u", name, sample_rate, period_size, wait_time,
 		capture_ports, playback_ports);
 
@@ -512,7 +513,7 @@ driver_initialize (jack_engine_t *engine, jack_client_t *client, const JSList * 
         if (!wait_time_set)
 	  wait_time = (((float)period_size) / ((float)sample_rate)) * 1000000.0;
 
-	return dummy_driver_new (client, "dummy_pcm", capture_ports,
+	return dummy_driver_new (engine, client, "dummy_pcm", capture_ports,
 				 playback_ports, sample_rate, period_size,
 				 wait_time);
 }

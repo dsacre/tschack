@@ -115,7 +115,7 @@ alsa_driver_check_card_type (alsa_driver_t *driver)
 		char tmp[16];
 		strncpy(tmp,strstr(driver->alsa_name_playback,"hw"),4);
 		tmp[4]='\0';
-		jack_info("control device %s",tmp);
+		driver->engine->jack_info("control device %s",tmp);
 		ctl_name = strdup(tmp);
 
 		snprintf (tmp, sizeof(tmp), "Audio%s", ctl_name+3);
@@ -127,10 +127,10 @@ alsa_driver_check_card_type (alsa_driver_t *driver)
 	// XXX: I don't know the "right" way to do this. Which to use
 	// driver->alsa_name_playback or driver->alsa_name_capture.
 	if ((err = snd_ctl_open (&driver->ctl_handle, ctl_name, 0)) < 0) {
-		jack_error ("control open \"%s\" (%s)", ctl_name,
+		driver->engine->jack_error ("control open \"%s\" (%s)", ctl_name,
 			    snd_strerror(err));
 	} else if ((err = snd_ctl_card_info(driver->ctl_handle, card_info)) < 0) {
-		jack_error ("control hardware info \"%s\" (%s)",
+		driver->engine->jack_error ("control hardware info \"%s\" (%s)",
 			    driver->alsa_name_playback, snd_strerror (err));
 		snd_ctl_close (driver->ctl_handle);
 	}
@@ -256,21 +256,21 @@ alsa_driver_setup_io_function_pointers (alsa_driver_t *driver)
 			
 			switch (driver->dither) {
 			case Rectangular:
-				jack_info("Rectangular dithering at 16 bits");
+				driver->engine->jack_info("Rectangular dithering at 16 bits");
 				driver->write_via_copy = driver->quirk_bswap?
                                         sample_move_dither_rect_d16_sSs:
                                         sample_move_dither_rect_d16_sS;
 				break;
 				
 			case Triangular:
-				jack_info("Triangular dithering at 16 bits");
+				driver->engine->jack_info("Triangular dithering at 16 bits");
 				driver->write_via_copy = driver->quirk_bswap?
                                         sample_move_dither_tri_d16_sSs:
                                         sample_move_dither_tri_d16_sS;
 				break;
 				
 			case Shaped:
-				jack_info("Noise-shaped dithering at 16 bits");
+				driver->engine->jack_info("Noise-shaped dithering at 16 bits");
 				driver->write_via_copy = driver->quirk_bswap?
                                         sample_move_dither_shaped_d16_sSs:
                                         sample_move_dither_shaped_d16_sS;
@@ -310,7 +310,7 @@ alsa_driver_setup_io_function_pointers (alsa_driver_t *driver)
 		    break;
 
 		default:
-			jack_error ("impossible sample width (%d) discovered!",
+			driver->engine->jack_error ("impossible sample width (%d) discovered!",
 				    driver->playback_sample_bytes);
 			exit (1);
 		}
@@ -365,14 +365,14 @@ alsa_driver_configure_stream (alsa_driver_t *driver, char *device_name,
 #define FIRST_16BIT_FORMAT 5
 
 	if ((err = snd_pcm_hw_params_any (handle, hw_params)) < 0)  {
-		jack_error ("ALSA: no playback configurations available (%s)",
+		driver->engine->jack_error ("ALSA: no playback configurations available (%s)",
 			    snd_strerror (err));
 		return -1;
 	}
 
 	if ((err = snd_pcm_hw_params_set_periods_integer (handle, hw_params))
 	    < 0) {
-		jack_error ("ALSA: cannot restrict period size to integral"
+		driver->engine->jack_error ("ALSA: cannot restrict period size to integral"
 			    " value.");
 		return -1;
 	}
@@ -382,7 +382,7 @@ alsa_driver_configure_stream (alsa_driver_t *driver, char *device_name,
 			if ((err = snd_pcm_hw_params_set_access (
 				     handle, hw_params,
 				     SND_PCM_ACCESS_MMAP_COMPLEX)) < 0) {
-				jack_error ("ALSA: mmap-based access is not possible"
+				driver->engine->jack_error ("ALSA: mmap-based access is not possible"
 					    " for the %s "
 					    "stream of this audio interface",
 					    stream_name);
@@ -400,7 +400,7 @@ alsa_driver_configure_stream (alsa_driver_t *driver, char *device_name,
 			if ((sample_width == 4
 			     ? format++ >= NUMFORMATS - 1
 			     : format-- <= 0)) {
-				jack_error ("Sorry. The audio interface \"%s\""
+				driver->engine->jack_error ("Sorry. The audio interface \"%s\""
 					    " doesn't support any of the"
 					    " hardware sample formats that"
 					    " JACK's alsa-driver can use.",
@@ -413,7 +413,7 @@ alsa_driver_configure_stream (alsa_driver_t *driver, char *device_name,
 			} else {
 				driver->quirk_bswap = 0;
 			}
-			jack_info ("ALSA: final selected sample format for %s: %s", stream_name, formats[format].Name);
+			driver->engine->jack_info ("ALSA: final selected sample format for %s: %s", stream_name, formats[format].Name);
 			break;
 		}
 	} 
@@ -423,7 +423,7 @@ alsa_driver_configure_stream (alsa_driver_t *driver, char *device_name,
 					       &frame_rate, NULL) ;
 	driver->frame_rate = frame_rate ;
 	if (err < 0) {
-		jack_error ("ALSA: cannot set sample/frame rate to %"
+		driver->engine->jack_error ("ALSA: cannot set sample/frame rate to %"
 			    PRIu32 " for %s", driver->frame_rate,
 			    stream_name);
 		return -1;
@@ -446,7 +446,7 @@ alsa_driver_configure_stream (alsa_driver_t *driver, char *device_name,
 			   channels for them to a sane default.
 			*/
 
-			jack_error (
+			driver->engine->jack_error (
 "You appear to be using the ALSA software \"plug\" layer, probably\n"
 "a result of using the \"default\" ALSA device. This is less\n"
 "efficient than it could be. Consider using a hardware device\n"
@@ -459,7 +459,7 @@ alsa_driver_configure_stream (alsa_driver_t *driver, char *device_name,
 
 	if ((err = snd_pcm_hw_params_set_channels (handle, hw_params,
 						   *nchns)) < 0) {
-		jack_error ("ALSA: cannot set channel count to %u for %s",
+		driver->engine->jack_error ("ALSA: cannot set channel count to %u for %s",
 			    *nchns, stream_name);
 		return -1;
 	}
@@ -468,7 +468,7 @@ alsa_driver_configure_stream (alsa_driver_t *driver, char *device_name,
 						      driver->frames_per_cycle,
 						      0))
 	    < 0) {
-		jack_error ("ALSA: cannot set period size to %" PRIu32
+		driver->engine->jack_error ("ALSA: cannot set period size to %" PRIu32
 			    " frames for %s", driver->frames_per_cycle,
 			    stream_name);
 		return -1;
@@ -480,21 +480,21 @@ alsa_driver_configure_stream (alsa_driver_t *driver, char *device_name,
 		*nperiodsp = driver->user_nperiods;
 	if (snd_pcm_hw_params_set_periods_near (handle, hw_params,
 						nperiodsp, NULL) < 0) {
-		jack_error ("ALSA: cannot set number of periods to %u for %s",
+		driver->engine->jack_error ("ALSA: cannot set number of periods to %u for %s",
 			    *nperiodsp, stream_name);
 		return -1;
 	}
 
 	if (*nperiodsp < driver->user_nperiods) {
-		jack_error ("ALSA: got smaller periods %u than %u for %s",
+		driver->engine->jack_error ("ALSA: got smaller periods %u than %u for %s",
 			    *nperiodsp, (unsigned int) driver->user_nperiods,
 			    stream_name);
 		return -1;
 	}
-	jack_info ("ALSA: use %d periods for %s", *nperiodsp, stream_name);
+	driver->engine->jack_info ("ALSA: use %d periods for %s", *nperiodsp, stream_name);
 #if 0	
 	if (!jack_power_of_two(driver->frames_per_cycle)) {
-		jack_error("JACK: frames must be a power of two "
+		driver->engine->jack_error("JACK: frames must be a power of two "
 			   "(64, 512, 1024, ...)\n");
 		return -1;
 	}
@@ -504,7 +504,7 @@ alsa_driver_configure_stream (alsa_driver_t *driver, char *device_name,
 						      *nperiodsp *
 						      driver->frames_per_cycle))
 	    < 0) {
-		jack_error ("ALSA: cannot set buffer length to %" PRIu32
+		driver->engine->jack_error ("ALSA: cannot set buffer length to %" PRIu32
 			    " for %s",
 			    *nperiodsp * driver->frames_per_cycle,
 			    stream_name);
@@ -512,7 +512,7 @@ alsa_driver_configure_stream (alsa_driver_t *driver, char *device_name,
 	}
 
 	if ((err = snd_pcm_hw_params (handle, hw_params)) < 0) {
-		jack_error ("ALSA: cannot set hardware parameters for %s",
+		driver->engine->jack_error ("ALSA: cannot set hardware parameters for %s",
 			    stream_name);
 		return -1;
 	}
@@ -521,7 +521,7 @@ alsa_driver_configure_stream (alsa_driver_t *driver, char *device_name,
 
 	if ((err = snd_pcm_sw_params_set_start_threshold (handle, sw_params,
 							  0U)) < 0) {
-		jack_error ("ALSA: cannot set start mode for %s", stream_name);
+		driver->engine->jack_error ("ALSA: cannot set start mode for %s", stream_name);
 		return -1;
 	}
 
@@ -532,27 +532,27 @@ alsa_driver_configure_stream (alsa_driver_t *driver, char *device_name,
 	
 	if ((err = snd_pcm_sw_params_set_stop_threshold (
 		     handle, sw_params, stop_th)) < 0) {
-		jack_error ("ALSA: cannot set stop mode for %s",
+		driver->engine->jack_error ("ALSA: cannot set stop mode for %s",
 			    stream_name);
 		return -1;
 	}
 
 	if ((err = snd_pcm_sw_params_set_silence_threshold (
 		     handle, sw_params, 0)) < 0) {
-		jack_error ("ALSA: cannot set silence threshold for %s",
+		driver->engine->jack_error ("ALSA: cannot set silence threshold for %s",
 			    stream_name);
 		return -1;
 	}
 
 #if 0
-	jack_info ("set silence size to %lu * %lu = %lu",
+	engine->jack_info ("set silence size to %lu * %lu = %lu",
 		 driver->frames_per_cycle, *nperiodsp,
 		 driver->frames_per_cycle * *nperiodsp);
 
 	if ((err = snd_pcm_sw_params_set_silence_size (
 		     handle, sw_params,
 		     driver->frames_per_cycle * *nperiodsp)) < 0) {
-		jack_error ("ALSA: cannot set silence size for %s",
+		driver->engine->jack_error ("ALSA: cannot set silence size for %s",
 			    stream_name);
 		return -1;
 	}
@@ -568,12 +568,12 @@ alsa_driver_configure_stream (alsa_driver_t *driver, char *device_name,
 			handle, sw_params, driver->frames_per_cycle);
 			
 	if (err < 0) {
-		jack_error ("ALSA: cannot set avail min for %s", stream_name);
+		driver->engine->jack_error ("ALSA: cannot set avail min for %s", stream_name);
 		return -1;
 	}
 
 	if ((err = snd_pcm_sw_params (handle, sw_params)) < 0) {
-		jack_error ("ALSA: cannot set software parameters for %s\n",
+		driver->engine->jack_error ("ALSA: cannot set software parameters for %s\n",
 			    stream_name);
 		return -1;
 	}
@@ -599,7 +599,7 @@ alsa_driver_set_parameters (alsa_driver_t *driver,
 	driver->frames_per_cycle = frames_per_cycle;
 	driver->user_nperiods = user_nperiods;
 
-	jack_info ("configuring for %" PRIu32 "Hz, period = %"
+	driver->engine->jack_info ("configuring for %" PRIu32 "Hz, period = %"
 		 PRIu32 " frames (%.1f ms), buffer = %" PRIu32 " periods",
 		 rate, frames_per_cycle, (((float)frames_per_cycle / (float) rate) * 1000.0f), user_nperiods);
 	
@@ -614,7 +614,7 @@ alsa_driver_set_parameters (alsa_driver_t *driver,
 			    &driver->capture_nperiods,
 			    &driver->capture_nchannels,
 			    driver->capture_sample_bytes)) {
-			jack_error ("ALSA: cannot configure capture channel");
+			driver->engine->jack_error ("ALSA: cannot configure capture channel");
 			return -1;
 		}
 	}
@@ -630,7 +630,7 @@ alsa_driver_set_parameters (alsa_driver_t *driver,
 			    &driver->playback_nperiods,
 			    &driver->playback_nchannels,
 			    driver->playback_sample_bytes)) {
-			jack_error ("ALSA: cannot configure playback channel");
+			driver->engine->jack_error ("ALSA: cannot configure playback channel");
 			return -1;
 		}
 	}
@@ -649,7 +649,7 @@ alsa_driver_set_parameters (alsa_driver_t *driver,
 
 	if (driver->capture_handle && driver->playback_handle) {
 		if (cr != pr) {
-			jack_error ("playback and capture sample rates do "
+			driver->engine->jack_error ("playback and capture sample rates do "
 				    "not match (%d vs. %d)", pr, cr);
 		}
 
@@ -659,7 +659,7 @@ alsa_driver_set_parameters (alsa_driver_t *driver,
 		 * different rate values between adc and dac
 		 */
 		if (cr != driver->frame_rate && pr != driver->frame_rate) {
-			jack_error ("sample rate in use (%d Hz) does not "
+			driver->engine->jack_error ("sample rate in use (%d Hz) does not "
 				    "match requested rate (%d Hz)",
 				    cr, driver->frame_rate);
 			driver->frame_rate = cr;
@@ -667,13 +667,13 @@ alsa_driver_set_parameters (alsa_driver_t *driver,
 		
 	}
 	else if (driver->capture_handle && cr != driver->frame_rate) {
-		jack_error ("capture sample rate in use (%d Hz) does not "
+		driver->engine->jack_error ("capture sample rate in use (%d Hz) does not "
 			    "match requested rate (%d Hz)",
 			    cr, driver->frame_rate);
 		driver->frame_rate = cr;
 	}
 	else if (driver->playback_handle && pr != driver->frame_rate) {
-		jack_error ("playback sample rate in use (%d Hz) does not "
+		driver->engine->jack_error ("playback sample rate in use (%d Hz) does not "
 			    "match requested rate (%d Hz)",
 			    pr, driver->frame_rate);
 		driver->frame_rate = pr;
@@ -697,7 +697,7 @@ alsa_driver_set_parameters (alsa_driver_t *driver,
 			|| (access == SND_PCM_ACCESS_MMAP_COMPLEX);
 
 		if (p_period_size != driver->frames_per_cycle) {
-			jack_error ("alsa_pcm: requested an interrupt every %"
+			driver->engine->jack_error ("alsa_pcm: requested an interrupt every %"
 				    PRIu32
 				    " frames but got %u frames for playback",
 				    driver->frames_per_cycle, p_period_size);
@@ -720,7 +720,7 @@ alsa_driver_set_parameters (alsa_driver_t *driver,
 			|| (access == SND_PCM_ACCESS_MMAP_COMPLEX);
 	
 		if (c_period_size != driver->frames_per_cycle) {
-			jack_error ("alsa_pcm: requested an interrupt every %"
+			driver->engine->jack_error ("alsa_pcm: requested an interrupt every %"
 				    PRIu32
 				    " frames but got %uc frames for capture",
 				    driver->frames_per_cycle, p_period_size);
@@ -747,7 +747,7 @@ alsa_driver_set_parameters (alsa_driver_t *driver,
 			break;
 
 		default:
-			jack_error ("programming error: unhandled format "
+			driver->engine->jack_error ("programming error: unhandled format "
 				    "type for playback");
 			exit (1);
 		}
@@ -765,7 +765,7 @@ alsa_driver_set_parameters (alsa_driver_t *driver,
 			break;
 
 		default:
-			jack_error ("programming error: unhandled format "
+			driver->engine->jack_error ("programming error: unhandled format "
 				    "type for capture");
 			exit (1);
 		}
@@ -776,7 +776,7 @@ alsa_driver_set_parameters (alsa_driver_t *driver,
 		snd_pcm_uframes_t offset, frames;
 		if (snd_pcm_mmap_begin(driver->playback_handle,
 				       &my_areas, &offset, &frames) < 0) {
-			jack_error ("ALSA: %s: mmap areas info error",
+			driver->engine->jack_error ("ALSA: %s: mmap areas info error",
 				    driver->alsa_name_playback);
 			return -1;
 		}
@@ -792,7 +792,7 @@ alsa_driver_set_parameters (alsa_driver_t *driver,
 		snd_pcm_uframes_t offset, frames;
 		if (snd_pcm_mmap_begin(driver->capture_handle,
 				       &my_areas, &offset, &frames) < 0) {
-			jack_error ("ALSA: %s: mmap areas info error",
+			driver->engine->jack_error ("ALSA: %s: mmap areas info error",
 				    driver->alsa_name_capture);
 			return -1;
 		}
@@ -868,7 +868,7 @@ alsa_driver_set_parameters (alsa_driver_t *driver,
 	if (driver->engine) {
 		if (driver->engine->set_buffer_size (driver->engine,
 						     driver->frames_per_cycle)) {
-			jack_error ("ALSA: Cannot set engine buffer size to %d (check MIDI)", driver->frames_per_cycle);
+			driver->engine->jack_error ("ALSA: Cannot set engine buffer size to %d (check MIDI)", driver->frames_per_cycle);
 			return -1;
 		}
 	}
@@ -904,7 +904,7 @@ alsa_driver_get_channel_addresses (alsa_driver_t *driver,
 			     driver->capture_handle, &driver->capture_areas,
 			     (snd_pcm_uframes_t *) capture_offset, 
 			     (snd_pcm_uframes_t *) capture_avail)) < 0) {
-			jack_error ("ALSA: %s: mmap areas info error",
+			driver->engine->jack_error ("ALSA: %s: mmap areas info error",
 				    driver->alsa_name_capture);
 			return -1;
 		}
@@ -923,7 +923,7 @@ alsa_driver_get_channel_addresses (alsa_driver_t *driver,
 			     driver->playback_handle, &driver->playback_areas, 
 			     (snd_pcm_uframes_t *) playback_offset, 
 			     (snd_pcm_uframes_t *) playback_avail)) < 0) {
-			jack_error ("ALSA: %s: mmap areas info error ",
+			driver->engine->jack_error ("ALSA: %s: mmap areas info error ",
 				    driver->alsa_name_playback);
 			return -1;
 		}
@@ -952,7 +952,7 @@ alsa_driver_start (alsa_driver_t *driver)
 
 	if (driver->playback_handle) {
 		if ((err = snd_pcm_prepare (driver->playback_handle)) < 0) {
-			jack_error ("ALSA: prepare error for playback on "
+			driver->engine->jack_error ("ALSA: prepare error for playback on "
 				    "\"%s\" (%s)", driver->alsa_name_playback,
 				    snd_strerror(err));
 			return -1;
@@ -962,7 +962,7 @@ alsa_driver_start (alsa_driver_t *driver)
 	if ((driver->capture_handle && driver->capture_and_playback_not_synced)
 	    || !driver->playback_handle) {
 		if ((err = snd_pcm_prepare (driver->capture_handle)) < 0) {
-			jack_error ("ALSA: prepare error for capture on \"%s\""
+			driver->engine->jack_error ("ALSA: prepare error for capture on \"%s\""
 				    " (%s)", driver->alsa_name_capture,
 				    snd_strerror(err));
 			return -1;
@@ -1017,7 +1017,7 @@ alsa_driver_start (alsa_driver_t *driver)
 
 		if (pavail !=
 		    driver->frames_per_cycle * driver->playback_nperiods) {
-			jack_error ("ALSA: full buffer not available at start");
+			driver->engine->jack_error ("ALSA: full buffer not available at start");
 			return -1;
 		}
 	
@@ -1047,7 +1047,7 @@ alsa_driver_start (alsa_driver_t *driver)
 				     * driver->frames_per_cycle);
 		
 		if ((err = snd_pcm_start (driver->playback_handle)) < 0) {
-			jack_error ("ALSA: could not start playback (%s)",
+			driver->engine->jack_error ("ALSA: could not start playback (%s)",
 				    snd_strerror (err));
 			return -1;
 		}
@@ -1056,7 +1056,7 @@ alsa_driver_start (alsa_driver_t *driver)
 	if ((driver->capture_handle && driver->capture_and_playback_not_synced)
 	    || !driver->playback_handle) {
 		if ((err = snd_pcm_start (driver->capture_handle)) < 0) {
-			jack_error ("ALSA: could not start capture (%s)",
+			driver->engine->jack_error ("ALSA: could not start capture (%s)",
 				    snd_strerror (err));
 			return -1;
 		}
@@ -1090,7 +1090,7 @@ alsa_driver_stop (alsa_driver_t *driver)
 		
 	if (driver->playback_handle) {
 		if ((err = snd_pcm_drop (driver->playback_handle)) < 0) {
-			jack_error ("ALSA: channel flush for playback "
+			driver->engine->jack_error ("ALSA: channel flush for playback "
 				    "failed (%s)", snd_strerror (err));
 			return -1;
 		}
@@ -1100,7 +1100,7 @@ alsa_driver_stop (alsa_driver_t *driver)
 	    || driver->capture_and_playback_not_synced) {
 		if (driver->capture_handle) {
 			if ((err = snd_pcm_drop (driver->capture_handle)) < 0) {
-				jack_error ("ALSA: channel flush for "
+				driver->engine->jack_error ("ALSA: channel flush for "
 					    "capture failed (%s)",
 					    snd_strerror (err));
 				return -1;
@@ -1145,12 +1145,12 @@ alsa_driver_xrun_recovery (alsa_driver_t *driver, float *delayed_usecs)
 	if (driver->capture_handle) {
 		if ((res = snd_pcm_status(driver->capture_handle, status))
 		    < 0) {
-			jack_error("status error: %s", snd_strerror(res));
+			driver->engine->jack_error("status error: %s", snd_strerror(res));
 		}
 	} else {
 		if ((res = snd_pcm_status(driver->playback_handle, status))
 		    < 0) {
-			jack_error("status error: %s", snd_strerror(res));
+			driver->engine->jack_error("status error: %s", snd_strerror(res));
 		}
 	}
 
@@ -1160,12 +1160,12 @@ alsa_driver_xrun_recovery (alsa_driver_t *driver, float *delayed_usecs)
 		if (driver->capture_handle) {
 			if ((res = snd_pcm_prepare(driver->capture_handle))
 			    < 0) {
-				jack_error("error preparing after suspend: %s", snd_strerror(res));
+				driver->engine->jack_error("error preparing after suspend: %s", snd_strerror(res));
 			}
 		} else {
 			if ((res = snd_pcm_prepare(driver->playback_handle))
 			    < 0) {
-				jack_error("error preparing after suspend: %s", snd_strerror(res));
+				driver->engine->jack_error("error preparing after suspend: %s", snd_strerror(res));
 			}
 		}
 	}
@@ -1298,7 +1298,7 @@ alsa_driver_wait (alsa_driver_t *driver, int extra_fd, int *status, float
 		if (poll_result < 0) {
 
 			if (errno == EINTR) {
-				jack_info ("poll interrupt");
+				driver->engine->jack_info ("poll interrupt");
 				// this happens mostly when run
 				// under gdb, or when exiting due to a signal
 				if (under_gdb) {
@@ -1308,7 +1308,7 @@ alsa_driver_wait (alsa_driver_t *driver, int extra_fd, int *status, float
 				return 0;
 			}
 			
-			jack_error ("ALSA: poll call failed (%s)",
+			driver->engine->jack_error ("ALSA: poll call failed (%s)",
 				    strerror (errno));
 			*status = -3;
 			return 0;
@@ -1355,7 +1355,7 @@ alsa_driver_wait (alsa_driver_t *driver, int extra_fd, int *status, float
 			if (snd_pcm_poll_descriptors_revents
 			    (driver->playback_handle, &driver->pfd[0],
 			     driver->playback_nfds, &revents) < 0) {
-				jack_error ("ALSA: playback revents failed");
+				driver->engine->jack_error ("ALSA: playback revents failed");
 				*status = -6;
 				return 0;
 			}
@@ -1378,7 +1378,7 @@ alsa_driver_wait (alsa_driver_t *driver, int extra_fd, int *status, float
 			if (snd_pcm_poll_descriptors_revents
 			    (driver->capture_handle, &driver->pfd[ci],
 			     driver->capture_nfds, &revents) < 0) {
-				jack_error ("ALSA: capture revents failed");
+				driver->engine->jack_error ("ALSA: capture revents failed");
 				*status = -6;
 				return 0;
 			}
@@ -1398,7 +1398,7 @@ alsa_driver_wait (alsa_driver_t *driver, int extra_fd, int *status, float
 		}
 		
 		if (poll_result == 0) {
-			jack_error ("ALSA: poll time out, polled for %" PRIu64
+			driver->engine->jack_error ("ALSA: poll time out, polled for %" PRIu64
 				    " usecs",
 				    poll_ret - poll_enter);
 			*status = -5;
@@ -1413,7 +1413,7 @@ alsa_driver_wait (alsa_driver_t *driver, int extra_fd, int *status, float
 			if (capture_avail == -EPIPE) {
 				xrun_detected = TRUE;
 			} else {
-				jack_error ("unknown ALSA avail_update return"
+				driver->engine->jack_error ("unknown ALSA avail_update return"
 					    " value (%u)", capture_avail);
 			}
 		}
@@ -1428,7 +1428,7 @@ alsa_driver_wait (alsa_driver_t *driver, int extra_fd, int *status, float
 			if (playback_avail == -EPIPE) {
 				xrun_detected = TRUE;
 			} else {
-				jack_error ("unknown ALSA avail_update return"
+				driver->engine->jack_error ("unknown ALSA avail_update return"
 					    " value (%u)", playback_avail);
 			}
 		}
@@ -1592,7 +1592,7 @@ alsa_driver_read (alsa_driver_t *driver, jack_nframes_t nframes)
 		
 		if ((err = snd_pcm_mmap_commit (driver->capture_handle,
 				offset, contiguous)) < 0) {
-			jack_error ("ALSA: could not complete read of %"
+			driver->engine->jack_error ("ALSA: could not complete read of %"
 				PRIu32 " frames: error = %d", contiguous, err);
 			return -1;
 		}
@@ -1699,7 +1699,7 @@ alsa_driver_write (alsa_driver_t* driver, jack_nframes_t nframes)
 		
 		if ((err = snd_pcm_mmap_commit (driver->playback_handle,
 				offset, contiguous)) < 0) {
-			jack_error ("ALSA: could not complete playback of %"
+			driver->engine->jack_error ("ALSA: could not complete playback of %"
 				PRIu32 " frames: error = %d", contiguous, err);
 			if (err != EPIPE && err != ESTRPIPE)
 				return -1;
@@ -1750,7 +1750,7 @@ alsa_driver_attach (alsa_driver_t *driver)
 	int port_flags;
 
 	if (driver->engine->set_buffer_size (driver->engine, driver->frames_per_cycle)) {
-		jack_error ("ALSA: cannot set engine buffer size for %d (check MIDI)", driver->frames_per_cycle);
+		driver->engine->jack_error ("ALSA: cannot set engine buffer size for %d (check MIDI)", driver->frames_per_cycle);
 		return -1;
 	}
 	driver->engine->set_sample_rate (driver->engine, driver->frame_rate);
@@ -1768,7 +1768,7 @@ alsa_driver_attach (alsa_driver_t *driver)
 		if ((port = jack_port_register (driver->client, buf,
 						JACK_DEFAULT_AUDIO_TYPE,
 						port_flags, 0)) == NULL) {
-			jack_error ("ALSA: cannot register port for %s", buf);
+			driver->engine->jack_error ("ALSA: cannot register port for %s", buf);
 			break;
 		}
 
@@ -1788,7 +1788,7 @@ alsa_driver_attach (alsa_driver_t *driver)
 		if ((port = jack_port_register (driver->client, buf,
 						JACK_DEFAULT_AUDIO_TYPE,
 						port_flags, 0)) == NULL) {
-			jack_error ("ALSA: cannot register port for %s", buf);
+			driver->engine->jack_error ("ALSA: cannot register port for %s", buf);
 			break;
 		}
 		
@@ -1804,7 +1804,7 @@ alsa_driver_attach (alsa_driver_t *driver)
 				     driver->client, buf,
 				     JACK_DEFAULT_AUDIO_TYPE,
 				     JackPortIsOutput, 0)) == NULL) {
-				jack_error ("ALSA: cannot register monitor "
+				driver->engine->jack_error ("ALSA: cannot register monitor "
 					    "port for %s", buf);
 			} else {
 
@@ -1820,7 +1820,7 @@ alsa_driver_attach (alsa_driver_t *driver)
 	if (driver->midi) {
 		int err = (driver->midi->attach)(driver->midi);
 		if (err)
-			jack_error("ALSA: cannot attach midi: %d", err);
+			driver->engine->jack_error("ALSA: cannot attach midi: %d", err);
 	}
 	
 
@@ -2022,7 +2022,7 @@ alsa_driver_new (jack_engine_t *engine,
 
 	alsa_driver_t *driver;
 
-	jack_info ("creating alsa driver ... %s|%s|%" PRIu32 "|%" PRIu32
+	engine->jack_info ("creating alsa driver ... %s|%s|%" PRIu32 "|%" PRIu32
 		"|%" PRIu32"|%" PRIu32"|%" PRIu32 "|%s|%s|%s|%s",
 		playing ? playback_alsa_device : "-",
 		capturing ? capture_alsa_device : "-", 
@@ -2102,6 +2102,8 @@ alsa_driver_new (jack_engine_t *engine,
 	driver->midi = midi_driver;
 	driver->xrun_recovery = 0;
 
+	driver->engine = engine;
+
 	if (alsa_driver_check_card_type (driver)) {
 		alsa_driver_delete (driver);
 		return NULL;
@@ -2111,7 +2113,7 @@ alsa_driver_new (jack_engine_t *engine,
 		if (engine->on_device_acquire (driver->reservation_name)) {
 			VERBOSE(engine, "acquired device %s", driver->reservation_name);
 		} else {
-			jack_error ("failed to acquire device %s", driver->reservation_name);
+			driver->engine->jack_error ("failed to acquire device %s", driver->reservation_name);
 			free (driver->reservation_name);
 			driver->reservation_name = NULL;
 			alsa_driver_delete (driver);
@@ -2119,7 +2121,6 @@ alsa_driver_new (jack_engine_t *engine,
 		}
 	}
 
-	driver->engine = engine;
 
 	alsa_driver_hw_specific (driver, hw_monitoring, hw_metering);
 
@@ -2130,7 +2131,7 @@ alsa_driver_new (jack_engine_t *engine,
 				  SND_PCM_NONBLOCK) < 0) {
 			switch (errno) {
 			case EBUSY:
-				jack_error ("the playback device \"%s\" is "
+				driver->engine->jack_error ("the playback device \"%s\" is "
 					    "already in use. Please stop the"
 					    " application using it and "
 					    "run JACK again",
@@ -2140,7 +2141,7 @@ alsa_driver_new (jack_engine_t *engine,
 				break;
 
 			case EPERM:
-				jack_error ("you do not have permission to open "
+				driver->engine->jack_error ("you do not have permission to open "
 					    "the audio device \"%s\" for playback",
 					    playback_alsa_device);
 				alsa_driver_delete (driver);
@@ -2163,7 +2164,7 @@ alsa_driver_new (jack_engine_t *engine,
 				  SND_PCM_NONBLOCK) < 0) {
 			switch (errno) {
 			case EBUSY:
-				jack_error ("the capture device \"%s\" is "
+				driver->engine->jack_error ("the capture device \"%s\" is "
 					    "already in use. Please stop the"
 					    " application using it and "
 					    "run JACK again",
@@ -2173,7 +2174,7 @@ alsa_driver_new (jack_engine_t *engine,
 				break;
 
 			case EPERM:
-				jack_error ("you do not have permission to open "
+				driver->engine->jack_error ("you do not have permission to open "
 					    "the audio device \"%s\" for capture",
 					    capture_alsa_device);
 				alsa_driver_delete (driver);
@@ -2194,7 +2195,7 @@ alsa_driver_new (jack_engine_t *engine,
 
 			/* they asked for playback, but we can't do it */
 
-			jack_error ("ALSA: Cannot open PCM device %s for "
+			driver->engine->jack_error ("ALSA: Cannot open PCM device %s for "
 				    "playback. Falling back to capture-only"
 				    " mode", name);
 
@@ -2213,7 +2214,7 @@ alsa_driver_new (jack_engine_t *engine,
 
 			/* they asked for capture, but we can't do it */
 			
-			jack_error ("ALSA: Cannot open PCM device %s for "
+			driver->engine->jack_error ("ALSA: Cannot open PCM device %s for "
 				    "capture. Falling back to playback-only"
 				    " mode", name);
 			
@@ -2235,7 +2236,7 @@ alsa_driver_new (jack_engine_t *engine,
 	if (driver->playback_handle) {
 		if ((err = snd_pcm_hw_params_malloc (
 			     &driver->playback_hw_params)) < 0) {
-			jack_error ("ALSA: could not allocate playback hw"
+			driver->engine->jack_error ("ALSA: could not allocate playback hw"
 				    " params structure");
 			alsa_driver_delete (driver);
 			return NULL;
@@ -2243,7 +2244,7 @@ alsa_driver_new (jack_engine_t *engine,
 
 		if ((err = snd_pcm_sw_params_malloc (
 			     &driver->playback_sw_params)) < 0) {
-			jack_error ("ALSA: could not allocate playback sw"
+			driver->engine->jack_error ("ALSA: could not allocate playback sw"
 				    " params structure");
 			alsa_driver_delete (driver);
 			return NULL;
@@ -2253,7 +2254,7 @@ alsa_driver_new (jack_engine_t *engine,
 	if (driver->capture_handle) {
 		if ((err = snd_pcm_hw_params_malloc (
 			     &driver->capture_hw_params)) < 0) {
-			jack_error ("ALSA: could not allocate capture hw"
+			driver->engine->jack_error ("ALSA: could not allocate capture hw"
 				    " params structure");
 			alsa_driver_delete (driver);
 			return NULL;
@@ -2261,7 +2262,7 @@ alsa_driver_new (jack_engine_t *engine,
 
 		if ((err = snd_pcm_sw_params_malloc (
 			     &driver->capture_sw_params)) < 0) {
-			jack_error ("ALSA: could not allocate capture sw"
+			driver->engine->jack_error ("ALSA: could not allocate capture sw"
 				    " params structure");
 			alsa_driver_delete (driver);
 			return NULL;
@@ -2348,7 +2349,7 @@ alsa_driver_clock_sync_notify (alsa_driver_t *driver, channel_t chn,
 }
 
 static int
-dither_opt (char c, DitherAlgorithm* dither)
+dither_opt (jack_engine_t *engine, char c, DitherAlgorithm* dither)
 {
 	switch (c) {
 	case '-':
@@ -2369,7 +2370,7 @@ dither_opt (char c, DitherAlgorithm* dither)
 		break;
 		
 	default:
-		jack_error ("ALSA driver: illegal dithering mode %c", c);
+		engine->jack_error ("ALSA driver: illegal dithering mode %c", c);
 		return -1;
 	}
 	return 0;
@@ -2626,7 +2627,7 @@ driver_initialize (jack_engine_t *engine, jack_client_t *client, const JSList * 
 
 		case 'r':
 		        srate = param->value.ui;
-			jack_info ("apparent rate = %d", srate);
+			engine->jack_info ("apparent rate = %d", srate);
 		        break;
 			
 		case 'p':
@@ -2644,7 +2645,7 @@ driver_initialize (jack_engine_t *engine, jack_client_t *client, const JSList * 
 			break;
 
 		case 'z':
-			if (dither_opt (param->value.c, &dither)) {
+			if (dither_opt (engine, param->value.c, &dither)) {
 			  return NULL;
 			}
 			break;
