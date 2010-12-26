@@ -1156,7 +1156,7 @@ alsa_driver_xrun_recovery (alsa_driver_t *driver, float *delayed_usecs)
 
 	if (snd_pcm_status_get_state(status) == SND_PCM_STATE_SUSPENDED)
 	{
-		MESSAGE("\n\n**** alsa_pcm: pcm in suspended state, resuming it \n\n" );
+		driver->engine->jack_error("\n\n**** alsa_pcm: pcm in suspended state, resuming it \n\n" );
 		if (driver->capture_handle) {
 			if ((res = snd_pcm_prepare(driver->capture_handle))
 			    < 0) {
@@ -1178,7 +1178,7 @@ alsa_driver_xrun_recovery (alsa_driver_t *driver, float *delayed_usecs)
 		snd_pcm_status_get_trigger_tstamp(status, &tstamp);
 		timersub(&now, &tstamp, &diff);
 		*delayed_usecs = diff.tv_sec * 1000000.0 + diff.tv_usec;
-		MESSAGE("\n\n**** alsa_pcm: xrun of at least %.3f "
+		driver->engine->jack_error("\n\n**** alsa_pcm: xrun of at least %.3f "
 			"msecs\n\n",
 			*delayed_usecs / 1000.0);
 	}
