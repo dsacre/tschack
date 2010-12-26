@@ -79,6 +79,8 @@ struct _jack_engine {
     jack_time_t (*get_microseconds)(void);
     int (* on_device_acquire)(const char *);
     void (* on_device_release)(const char *);
+    void (* jack_error) (const char *fmt, ...);
+    void (* jack_info) (const char *fmt, ...);
     /* "private" sections starts here */
 
     /* engine serialization -- use precedence for deadlock avoidance */

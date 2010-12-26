@@ -2051,6 +2051,8 @@ jack_engine_new (int realtime, int rtpriority, int do_mlock, int do_unlock,
 	jack_set_clock_source (clock_source);
 	engine->control->clock_source = clock_source;
 	engine->get_microseconds = jack_get_microseconds_pointer();
+	engine->jack_error = &jack_error;
+	engine->jack_info = &jack_info;
 
 	VERBOSE (engine, "clock source = %s", jack_clock_source_name (clock_source));
 
