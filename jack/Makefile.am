@@ -3,6 +3,7 @@ MAINTAINERCLEANFILES = Makefile.in version.h
 libjackincludedir = $(includedir)/jack
 
 libjackinclude_HEADERS = 	\
+	control.h		\
 	intclient.h		\
 	jack.h			\
 	ringbuffer.h		\
