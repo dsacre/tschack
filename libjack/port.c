@@ -227,7 +227,6 @@ jack_port_register (jack_client_t *client,
 		    unsigned long buffer_size)
 {
 	jack_request_t req;
-	jack_port_t *port = 0;
 	int length ;
 
         VALGRIND_MEMSET (&req, 0, sizeof (req));
