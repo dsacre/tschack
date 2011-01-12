@@ -246,7 +246,8 @@ typedef enum  {
   StopFreewheel,
   ClientRegistered,
   ClientUnregistered,
-  SaveSession
+  SaveSession,
+  LatencyCallback
 } JackEventType;
 
 typedef struct {
@@ -317,6 +318,7 @@ typedef volatile struct {
     volatile uint8_t	client_register_cbset;
     volatile uint8_t	thread_cb_cbset;
     volatile uint8_t	session_cbset;
+    volatile uint8_t	latency_cbset;
 
 } POST_PACKED_STRUCTURE jack_client_control_t;
 
