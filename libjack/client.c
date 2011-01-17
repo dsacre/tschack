@@ -597,7 +597,7 @@ jack_port_recalculate_latency (jack_port_t *port, jack_latency_callback_mode_t m
 	JSList *node;
 
 	pthread_mutex_lock (&port->connection_lock);
-	for (node = port->connections; node; node = jack_slist_next (node)) {
+	for (node = port->connections_locked; node; node = jack_slist_next (node)) {
 		jack_port_t *other = node->data;
 		jack_latency_range_t other_latency;
 
@@ -624,10 +624,13 @@ jack_client_handle_latency_callback (jack_client_t *client, jack_event_t *event,
 	JSList *node;
 	jack_latency_range_t latency = { UINT32_MAX, 0 };
 
+
 	/* first setup all latency values of the ports.
 	 * this is based on the connections of the ports.
 	 */
-	for (node = client->ports; node; node = jack_slist_next (node)) {
+
+	pthread_mutex_lock (&client->ports_mutex);
+	for (node = client->ports_locked; node; node = jack_slist_next (node)) {
 		jack_port_t *port = node->data;
 
 		if ((jack_port_flags (port) & JackPortIsOutput) && (mode == JackPlaybackLatency)) {
@@ -637,6 +640,7 @@ jack_client_handle_latency_callback (jack_client_t *client, jack_event_t *event,
 			jack_port_recalculate_latency (port, mode);
 		}
 	}
+	pthread_mutex_unlock (&client->ports_mutex);
 
 	/* for a driver invocation, this is enough.
 	 * input and output ports do not depend on each other.
@@ -651,9 +655,10 @@ jack_client_handle_latency_callback (jack_client_t *client, jack_event_t *event,
 		 */
 
 		if (mode == JackPlaybackLatency) {
+			pthread_mutex_lock (&client->ports_mutex);
 			/* iterate over all OutputPorts, to find maximum playback latency
 			 */
-			for (node = client->ports; node; node = jack_slist_next (node)) {
+			for (node = client->ports_locked; node; node = jack_slist_next (node)) {
 				jack_port_t *port = node->data;
 
 				if (port->shared->flags & JackPortIsOutput) {
@@ -672,18 +677,21 @@ jack_client_handle_latency_callback (jack_client_t *client, jack_event_t *event,
 
 			/* now set the found latency on all input ports
 			 */
-			for (node = client->ports; node; node = jack_slist_next (node)) {
+			for (node = client->ports_locked; node; node = jack_slist_next (node)) {
 				jack_port_t *port = node->data;
 
 				if (port->shared->flags & JackPortIsInput) {
 					jack_port_set_latency_range (port, mode, &latency);
 				}
 			}
+			pthread_mutex_unlock (&client->ports_mutex);
 		}
 		if (mode == JackCaptureLatency) {
+
+			pthread_mutex_lock (&client->ports_mutex);
 			/* iterate over all InputPorts, to find maximum playback latency
 			 */
-			for (node = client->ports; node; node = jack_slist_next (node)) {
+			for (node = client->ports_locked; node; node = jack_slist_next (node)) {
 				jack_port_t *port = node->data;
 
 				if (port->shared->flags & JackPortIsInput) {
@@ -702,13 +710,14 @@ jack_client_handle_latency_callback (jack_client_t *client, jack_event_t *event,
 
 			/* now set the found latency on all output ports
 			 */
-			for (node = client->ports; node; node = jack_slist_next (node)) {
+			for (node = client->ports_locked; node; node = jack_slist_next (node)) {
 				jack_port_t *port = node->data;
 
 				if (port->shared->flags & JackPortIsOutput) {
 					jack_port_set_latency_range (port, mode, &latency);
 				}
 			}
+			pthread_mutex_unlock (&client->ports_mutex);
 		}
 		return 0;
 	}
