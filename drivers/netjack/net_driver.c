@@ -367,11 +367,11 @@ net_driver_new (jack_engine_t * engine,
 
     netjack_startup( netj );
 
-    driver->engine->jack_info ("netjack: period   : up: %d / dn: %d", netj->net_period_up, netj->net_period_down);
-    driver->engine->jack_info ("netjack: framerate: %d", netj->sample_rate);
-    driver->engine->jack_info ("netjack: audio    : cap: %d / pbk: %d)", netj->capture_channels_audio, netj->playback_channels_audio);
-    driver->engine->jack_info ("netjack: midi     : cap: %d / pbk: %d)", netj->capture_channels_midi, netj->playback_channels_midi);
-    driver->engine->jack_info ("netjack: buffsize : rx: %d)", netj->rx_bufsize);
+    engine->jack_info ("netjack: period   : up: %d / dn: %d", netj->net_period_up, netj->net_period_down);
+    engine->jack_info ("netjack: framerate: %d", netj->sample_rate);
+    engine->jack_info ("netjack: audio    : cap: %d / pbk: %d)", netj->capture_channels_audio, netj->playback_channels_audio);
+    engine->jack_info ("netjack: midi     : cap: %d / pbk: %d)", netj->capture_channels_midi, netj->playback_channels_midi);
+    engine->jack_info ("netjack: buffsize : rx: %d)", netj->rx_bufsize);
     driver->period_usecs = netj->period_usecs;
 
     return (jack_driver_t *) driver;
