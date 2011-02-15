@@ -764,13 +764,21 @@ fi
 AC_SUBST(NETJACK_LIBS)
 AC_SUBST(NETJACK_CFLAGS)
 
-PKG_CHECK_MODULES(CGROUP, libcgroup,[HAVE_CGROUP=true], [HAVE_CGROUP=false])
-if test x$HAVE_CGROUP = xfalse; then
-	AC_DEFINE(HAVE_CGROUP,0,"Whether libcgroup is available")
-else
-	AC_DEFINE(HAVE_CGROUP,1,"Whether libcgroup is available")
-fi
+AC_ARG_ENABLE(libcgroup,
+	AC_HELP_STRING([--enable-libcgroup],[build libcgroup support]),
+   TRY_CGROUP=$enableval , TRY_CGROUP=no)
 
+if test x$TRY_CGROUP = xyes; then 
+	PKG_CHECK_MODULES(CGROUP, libcgroup,[HAVE_CGROUP=true], [HAVE_CGROUP=false])
+	if test x$HAVE_CGROUP = xfalse; then
+		AC_DEFINE(HAVE_CGROUP,0,"Whether libcgroup is available")
+		AC_MSG_ERROR( [libcgroup requested, but not available] )
+	else
+		AC_DEFINE(HAVE_CGROUP,1,"Whether libcgroup is available")
+	fi
+else
+	AC_DEFINE(HAVE_CGROUP,0,"Whether libcgroup is available")
+fi
 AC_SUBST(CGROUP_LIBS)
 AC_SUBST(CGROUP_CFLAGS)
 
