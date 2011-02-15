@@ -1701,7 +1701,7 @@ alsa_driver_write (alsa_driver_t* driver, jack_nframes_t nframes)
 				offset, contiguous)) < 0) {
 			driver->engine->jack_error ("ALSA: could not complete playback of %"
 				PRIu32 " frames: error = %d", contiguous, err);
-			if (err != EPIPE && err != ESTRPIPE)
+			if (err != -EPIPE && err != -ESTRPIPE)
 				return -1;
 		}
 
