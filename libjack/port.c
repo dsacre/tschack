@@ -228,6 +228,8 @@ jack_port_register (jack_client_t *client,
 {
 	jack_request_t req;
 	int length ;
+        int free;
+	jack_port_t *retval = NULL;
 
         VALGRIND_MEMSET (&req, 0, sizeof (req));
 
@@ -261,8 +263,22 @@ jack_port_register (jack_client_t *client,
 		return NULL;
 	}
 
-        int free;
-	return jack_port_by_id_int( client, req.x.port_info.port_id, &free );
+	retval = jack_port_by_id_int( client, req.x.port_info.port_id, &free );
+
+	// when this port has already been in our ports list, its still initialized
+	// to its old type.
+	// so lets setup the type again.
+
+	jack_port_type_id_t ptid = retval->shared->ptype_id;
+	retval->type_info = &client->engine->port_types[ptid];
+
+	jack_port_functions_t *port_functions = jack_get_port_functions(ptid);
+	if (port_functions == NULL)
+		port_functions = &jack_builtin_NULL_functions;
+	retval->fptr = *port_functions;
+	retval->shared->has_mixdown = (retval->fptr.mixdown ? TRUE : FALSE);
+
+	return retval;
 }
 
 int 
