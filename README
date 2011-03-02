@@ -1,8 +1,5 @@
 Welcome to JACK, the Jack Audio Connection Kit.
 
 Please see the website (http://jackaudio.org/) for more information.
-
 This is tschack, it is based on jack1, but has most of the features of jack2.
 this includes backendswitching, SMP operation and clickless connections.
-
-

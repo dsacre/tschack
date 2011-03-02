@@ -1733,6 +1733,21 @@ out:
 	return NULL;
 }
 
+int
+jack_client_has_session_callback (jack_client_t *client, const char *client_name)
+{
+	jack_request_t request;
+	int retval;
+	VALGRIND_MEMSET (&request, 0, sizeof (request));
+
+	request.type = SessionHasCallback;
+	strncpy (request.x.name, client_name, JACK_CLIENT_NAME_SIZE);
+
+	retval = jack_client_deliver_request(client, &request);
+
+	return retval;
+}
+
 void
 jack_start_freewheel (jack_client_t* client)
 {
@@ -2847,6 +2862,10 @@ jack_set_buffer_size (jack_client_t *client, jack_nframes_t nframes)
 	jack_request_t req;
 
         VALGRIND_MEMSET (&req, 0, sizeof (req));
+
+        if (nframes < 1 || nframes > 16384) {
+                return ERANGE;
+        }
 
 	req.type = SetBufferSize;
 	req.x.nframes = nframes;

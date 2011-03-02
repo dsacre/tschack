@@ -421,10 +421,10 @@ int jack_set_xrun_callback (jack_client_t *,
  * Clients that meet any of the following conditions do NOT
  * need to register a latency callback:
  *
- *    * have only input ports
- *    * have only output ports
- *    * their output is totally unrelated to their input
- *    * their output is not delayed relative to their input
+ *    - have only input ports
+ *    - have only output ports
+ *    - their output is totally unrelated to their input
+ *    - their output is not delayed relative to their input
  *        (i.e. data that arrives in a given process() 
  *         callback is processed and output again in the
  *         same callback)
@@ -432,7 +432,7 @@ int jack_set_xrun_callback (jack_client_t *,
  * Clients NOT registering a latency callback MUST also
  * satisfy this condition:
  * 
- *    * have no multiple distinct internal signal pathways
+ *    - have no multiple distinct internal signal pathways
  *      
  * This means that if your client has more than 1 input and
  * output port, and considers them always "correlated"
@@ -849,6 +849,14 @@ int jack_port_name_size(void) JACK_OPTIONAL_WEAK_EXPORT;
  * including the final NULL character.  This value is a constant.
  */
 int jack_port_type_size(void) JACK_OPTIONAL_WEAK_EXPORT;
+
+/**
+ * @return the buffersize of a port of type @arg port_type.
+ *
+ * this function may only be called in a buffer_size callback.
+ */
+size_t jack_port_type_get_buffer_size (jack_client_t *client, const char *port_type) JACK_WEAK_EXPORT;
+
 /*@}*/
 
 /**
