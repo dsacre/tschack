@@ -1182,7 +1182,6 @@ int do_midi_output(process_midi_t *proc)
 			error_log("midi_out: writing to port %s failed: %s", port->base.name, snd_strerror(res));
 			return 0;
 		}
-		snd_rawmidi_drain(port->base.rawmidi);
 	}
 
 	// update pfds for this port
